@@ -27,14 +27,35 @@ let reconectando = null;
 
 const pausa = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
 
+// Al pegar la variable en una plataforma (Render, Railway...) es fácil arrastrar el nombre («DATABASE_URL=postgresql://...») o unas
+// comillas: se quitan antes de leerla.
+function limpiarUrl(valor) {
+  let texto = String(valor ?? '').trim();
+  texto = texto.replace(/^DATABASE_URL\s*=\s*/i, '').trim();
+  const comillas = texto.match(/^(["'])([\s\S]*)\1$/);
+  return comillas ? comillas[2].trim() : texto;
+}
+
+// Qué tiene de raro una dirección que no se pudo leer, sin mostrar nunca la clave (solo el principio, que es el tipo de dirección).
+function pistasDeUrl(texto) {
+  const pistas = [];
+  if (!/^postgres(ql)?:\/\//i.test(texto)) pistas.push(`empieza con «${texto.slice(0, 12)}…» y debe empezar con postgresql://`);
+  if (/\s/.test(texto)) pistas.push('tiene espacios o saltos de línea');
+  if (/\[YOUR-PASSWORD\]/i.test(texto)) pistas.push('todavía dice [YOUR-PASSWORD]: cámbialo por la contraseña de la base');
+  return pistas.length > 0 ? ` Revisa el valor: ${pistas.join('; ')}.` : '';
+}
+
 function leerUrl() {
-  const texto = String(process.env.DATABASE_URL || '').trim();
+  const texto = limpiarUrl(process.env.DATABASE_URL);
   if (!texto) throw new Error('Falta DATABASE_URL');
   let url;
   try {
     url = new URL(texto);
   } catch {
-    throw new Error('DATABASE_URL no parece una dirección de PostgreSQL. Debe ser postgresql://usuario:clave@servidor:5432/base (si la clave lleva símbolos como # o @, hay que escribirlos con % y su código)');
+    throw new Error(
+      'DATABASE_URL no parece una dirección de PostgreSQL. Debe ser postgresql://usuario:clave@servidor:5432/base (si la clave lleva símbolos como # o @, hay que escribirlos con % y su código).' +
+        pistasDeUrl(texto),
+    );
   }
   if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
     throw new Error('DATABASE_URL debe empezar con postgresql://');
