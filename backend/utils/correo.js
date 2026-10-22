@@ -1,8 +1,11 @@
 // Envío de correos del sistema (comprobantes de reservas y solicitudes, avisos del personal).
 //
 // Según lo que el servidor tenga configurado (ver backend/.env.example), el correo sale por uno de tres caminos:
-//   1. API HTTPS de un servicio de correo (CORREO_API=brevo o resend, con CORREO_API_KEY). No usa puertos SMTP: sirve en las
-//      plataformas que los bloquean (Railway en sus planes Free, Trial y Hobby; Render en los servicios gratuitos).
+//   1. API HTTPS de un servicio de correo. No usa puertos SMTP: sirve en las plataformas que los bloquean (Railway en sus planes
+//      Free, Trial y Hobby; Render en los servicios gratuitos). Puede ser:
+//        - CORREO_API=gmail: la API de Gmail con una cuenta de Google propia (gratis). Usa GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET y
+//          GMAIL_REFRESH_TOKEN; este último lo genera `npm run token-gmail` y no vence (ver README, «Correo con Gmail»).
+//        - CORREO_API=brevo o resend, con CORREO_API_KEY.
 //   2. SMTP (SMTP_HOST y las que lo acompañan), por ejemplo el de Gmail, Microsoft 365 o el de la propia universidad.
 //   3. Simulado: sin nada de lo anterior, los mensajes se arman completos y se guardan en la bandeja, pero no salen. Así todo
 //      funciona igual en pruebas y demostraciones sin mandar correos reales.
@@ -53,6 +56,16 @@ const PROVEEDORES_API = {
   },
 };
 
+// Gmail no recibe una clave fija: con el refresh token se pide a Google un token de acceso que dura una hora, se guarda en memoria
+// y se pide otro un poco antes de que venza. El refresh token no vence mientras la app de Google esté «En producción».
+const GMAIL = {
+  nombre: 'Gmail',
+  urlDelToken: 'https://oauth2.googleapis.com/token',
+  urlDeEnvio: 'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media',
+};
+const MARGEN_DEL_TOKEN_MS = 2 * 60 * 1000;
+let tokenDeGmail = { huella: '', valor: '', venceEn: 0, cuenta: null };
+
 // "Nombre" <correo@dominio> o solo correo@dominio. Devuelve { nombre, correo } o null si no tiene forma de remitente.
 function parsearRemitente(texto) {
   const t = String(texto ?? '').trim();
@@ -78,10 +91,21 @@ function leerConfiguracion() {
   const puerto = Number(process.env.SMTP_PORT) || 587;
   const usuario = String(process.env.SMTP_USER || '').trim();
   const textoRemitente = String(process.env.CORREO_REMITENTE || process.env.SMTP_FROM || '').trim();
+  const gmail = {
+    clienteId: String(process.env.GMAIL_CLIENT_ID || '').trim(),
+    clienteSecreto: String(process.env.GMAIL_CLIENT_SECRET || '').trim(),
+    refreshToken: String(process.env.GMAIL_REFRESH_TOKEN || '').trim(),
+  };
 
   let modo = 'simulado';
-  if (api) {
-    if (!PROVEEDORES_API[api]) avisos.push(`CORREO_API vale «${api}» y no es un servicio conocido: usa brevo o resend.`);
+  if (api === 'gmail') {
+    const faltan = [['GMAIL_CLIENT_ID', gmail.clienteId], ['GMAIL_CLIENT_SECRET', gmail.clienteSecreto], ['GMAIL_REFRESH_TOKEN', gmail.refreshToken]]
+      .filter(([, valor]) => !valor)
+      .map(([nombre]) => nombre);
+    if (faltan.length > 0) avisos.push(`Para enviar con Gmail falta ${faltan.join(', ')}. Se generan con «npm run token-gmail» (ver README, «Correo con Gmail»).`);
+    else modo = 'api';
+  } else if (api) {
+    if (!PROVEEDORES_API[api]) avisos.push(`CORREO_API vale «${api}» y no es un servicio conocido: usa gmail, brevo o resend.`);
     else if (!claveApi) avisos.push('Falta CORREO_API_KEY: sin la clave de la API no se puede enviar.');
     else modo = 'api';
   }
@@ -99,7 +123,11 @@ function leerConfiguracion() {
     }
   }
   if (!remitente && modo === 'api' && !textoRemitente) {
-    avisos.push('Falta CORREO_REMITENTE: la API solo envía desde un remitente que hayas verificado en el servicio.');
+    avisos.push(
+      api === 'gmail'
+        ? 'Falta CORREO_REMITENTE: escribe la cuenta de Gmail con la que se generó el token, por ejemplo "Biblioteca" <biblioteca@gmail.com>.'
+        : 'Falta CORREO_REMITENTE: la API solo envía desde un remitente que hayas verificado en el servicio.',
+    );
   }
   if (modo === 'simulado' && process.env.NODE_ENV === 'production') {
     avisos.push('El correo está en modo simulado: los comprobantes por correo NO salen. Configura SMTP o una API de correo para que salgan de verdad.');
@@ -115,6 +143,7 @@ function leerConfiguracion() {
     seguro: seguro === null ? puerto === 465 : seguro,
     usuario,
     clave: process.env.SMTP_PASS,
+    gmail,
     remitente,
     avisos,
     espera: Number(process.env.CORREO_TIEMPO_MS) || ESPERA_DE_RESPUESTA_MS,
@@ -172,7 +201,7 @@ async function detalleDeRespuesta(respuesta) {
   const texto = await respuesta.text().catch(() => '');
   try {
     const json = JSON.parse(texto);
-    return recortar(json.message || json.error || json.name || texto);
+    return recortar(json.message || json.error?.message || json.error || json.name || texto);
   } catch {
     return recortar(texto);
   }
@@ -205,6 +234,111 @@ async function enviarPorApi(config, { para, asunto, texto, html, adjuntos }) {
   }
   if (!respuesta.ok) {
     throw new Error(mensajeDeApi(proveedor, respuesta.status, await detalleDeRespuesta(respuesta)));
+  }
+}
+
+function nombreDelServicio(config) {
+  return config.api === 'gmail' ? GMAIL.nombre : PROVEEDORES_API[config.api].nombre;
+}
+
+// El correo de la cuenta viene en el id_token (se pidió el permiso «email» al generar el token). Solo se usa para mostrarlo.
+function cuentaDelIdToken(idToken) {
+  try {
+    return JSON.parse(Buffer.from(String(idToken).split('.')[1], 'base64url').toString('utf8')).email || null;
+  } catch {
+    return null;
+  }
+}
+
+// Pide a Google un token de acceso nuevo con el refresh token (o devuelve el que ya hay si todavía sirve).
+async function tokenDeAccesoDeGmail(config, { renovar = false } = {}) {
+  const huella = JSON.stringify([config.gmail.clienteId, config.gmail.clienteSecreto, config.gmail.refreshToken]);
+  if (!renovar && tokenDeGmail.huella === huella && Date.now() < tokenDeGmail.venceEn - MARGEN_DEL_TOKEN_MS) return tokenDeGmail.valor;
+  let respuesta;
+  try {
+    // GMAIL_TOKEN_URL existe solo para las pruebas automáticas, como CORREO_API_URL.
+    respuesta = await fetch(process.env.GMAIL_TOKEN_URL || GMAIL.urlDelToken, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: config.gmail.clienteId,
+        client_secret: config.gmail.clienteSecreto,
+        refresh_token: config.gmail.refreshToken,
+        grant_type: 'refresh_token',
+      }),
+      signal: AbortSignal.timeout(config.espera),
+    });
+  } catch (error) {
+    const causa = error.name === 'TimeoutError' ? 'tardó demasiado en responder' : error.cause?.code || error.message;
+    throw new Error(`No se pudo conectar con Google (${causa}). Revisa que el servidor tenga salida a internet.`);
+  }
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok || !datos.access_token) {
+    // Si Google anuló el refresh token o el cliente, también anuló los tokens de acceso que había dado: no se sigue usando el guardado.
+    if (['invalid_grant', 'invalid_client', 'unauthorized_client'].includes(datos.error)) tokenDeGmail = { huella: '', valor: '', venceEn: 0, cuenta: null };
+    const detalle = recortar(datos.error_description || datos.error || `error ${respuesta.status}`);
+    if (datos.error === 'invalid_grant') {
+      throw new Error(
+        `Google ya no acepta GMAIL_REFRESH_TOKEN (${detalle}). Genera uno nuevo con «npm run token-gmail». Si pasa cada 7 días, la app ` +
+          'de Google está en modo «Prueba»: en Google Cloud, «Pantalla de consentimiento de OAuth» (Público), pulsa «Publicar app» para que el token no venza.',
+      );
+    }
+    if (datos.error === 'invalid_client' || datos.error === 'unauthorized_client') {
+      throw new Error(`Google rechazó GMAIL_CLIENT_ID o GMAIL_CLIENT_SECRET (${detalle}). Cópialos otra vez desde Google Cloud, «Credenciales».`);
+    }
+    throw new Error(`Google no entregó el token de acceso: ${detalle}`);
+  }
+  tokenDeGmail = {
+    huella,
+    valor: datos.access_token,
+    venceEn: Date.now() + (Number(datos.expires_in) || 3600) * 1000,
+    cuenta: cuentaDelIdToken(datos.id_token) ?? (tokenDeGmail.huella === huella ? tokenDeGmail.cuenta : null),
+  };
+  return tokenDeGmail.valor;
+}
+
+// Arma el mensaje completo (MIME, con texto, HTML y adjuntos) con nodemailer, sin conectarse a ningún servidor.
+async function mensajeMime(config, { para, asunto, texto, html, adjuntos }) {
+  const nodemailer = require('nodemailer');
+  const armador = nodemailer.createTransport({ streamTransport: true, buffer: true, newline: 'windows' });
+  const { message } = await armador.sendMail({
+    from: { name: config.remitente.nombre, address: config.remitente.correo },
+    to: para,
+    subject: asunto,
+    text: texto,
+    html,
+    attachments: adjuntos.map((a) => ({ filename: a.nombre, content: a.contenido, contentType: a.tipo })),
+  });
+  return message;
+}
+
+async function enviarPorGmail(config, mensaje) {
+  const cuerpo = await mensajeMime(config, mensaje);
+  // Si Google invalida el token de acceso antes de tiempo (401), se pide uno nuevo y se intenta una vez más.
+  for (let intento = 0; intento < 2; intento += 1) {
+    const token = await tokenDeAccesoDeGmail(config, { renovar: intento > 0 });
+    let respuesta;
+    try {
+      respuesta = await fetch(process.env.CORREO_API_URL || GMAIL.urlDeEnvio, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'message/rfc822' },
+        body: cuerpo,
+        signal: AbortSignal.timeout(config.espera),
+      });
+    } catch (error) {
+      const causa = error.name === 'TimeoutError' ? 'tardó demasiado en responder' : error.cause?.code || error.message;
+      throw new Error(`No se pudo conectar con Gmail (${causa}). Revisa que el servidor tenga salida a internet.`);
+    }
+    if (respuesta.ok) return;
+    if (respuesta.status === 401 && intento === 0) continue;
+    const detalle = await detalleDeRespuesta(respuesta);
+    if (respuesta.status === 403) {
+      throw new Error(
+        `Gmail no dejó enviar: ${detalle}. Revisa que la «Gmail API» esté habilitada en el proyecto de Google Cloud y que el token se haya generado con el permiso de enviar correo.`,
+      );
+    }
+    if (respuesta.status === 429) throw new Error(`Gmail dice que se alcanzó el límite de envíos (unos 500 al día en una cuenta gratuita): ${detalle}`);
+    throw new Error(mensajeDeApi(GMAIL, respuesta.status, detalle));
   }
 }
 
@@ -250,6 +384,7 @@ async function enviarCorreo({ para, asunto, texto, html, tipo = 'otro', adjuntos
     }
     const mensaje = { para, asunto, texto, html: html ?? htmlDeTexto(texto), adjuntos };
     if (config.modo === 'smtp') await enviarPorSmtp(config, mensaje);
+    else if (config.modo === 'api' && config.api === 'gmail') await enviarPorGmail(config, mensaje);
     else if (config.modo === 'api') await enviarPorApi(config, mensaje);
   } catch (error) {
     registro.estado = 'fallido';
@@ -281,7 +416,7 @@ function ocultarUsuario(usuario) {
 }
 
 function describir(config) {
-  if (config.modo === 'api') return `API de ${PROVEEDORES_API[config.api].nombre}`;
+  if (config.modo === 'api') return `API de ${nombreDelServicio(config)}`;
   if (config.modo === 'smtp') return `SMTP (${config.host}:${config.puerto})`;
   return 'simulado (no sale ningún correo)';
 }
@@ -292,9 +427,11 @@ function estado() {
   return {
     modo: config.modo,
     descripcion: describir(config),
-    servidor: config.modo === 'smtp' ? `${config.host}:${config.puerto}` : config.modo === 'api' ? PROVEEDORES_API[config.api].nombre : null,
+    servidor: config.modo === 'smtp' ? `${config.host}:${config.puerto}` : config.modo === 'api' ? nombreDelServicio(config) : null,
     conexionSegura: config.modo === 'smtp' ? config.seguro : null,
     usuario: config.modo === 'smtp' && config.usuario ? ocultarUsuario(config.usuario) : null,
+    // SMTP y Gmail se pueden comprobar sin mandar nada; Brevo y Resend no.
+    verificable: config.modo === 'smtp' || (config.modo === 'api' && config.api === 'gmail'),
     remitente: config.remitente ? `${config.remitente.nombre} <${config.remitente.correo}>` : null,
     avisos: config.avisos,
     ultimoEnvio,
@@ -316,12 +453,28 @@ function recientes(limite = 20) {
   }));
 }
 
-// Comprueba la conexión y las credenciales sin mandar ningún correo. Solo SMTP puede hacerlo; las API no tienen una
-// comprobación igual en todos los servicios, ahí sirve el correo de prueba.
+// Comprueba la conexión y las credenciales sin mandar ningún correo. SMTP abre la conexión; Gmail pide un token de acceso con el
+// refresh token. Brevo y Resend no tienen una comprobación así: ahí sirve el correo de prueba.
 async function verificar() {
   const config = leerConfiguracion();
   if (config.modo === 'simulado') {
     return { ok: false, mensaje: 'El correo está en modo simulado: no hay conexión que comprobar.' };
+  }
+  if (config.modo === 'api' && config.api === 'gmail') {
+    try {
+      await tokenDeAccesoDeGmail(config, { renovar: true });
+    } catch (error) {
+      return { ok: false, mensaje: error.message };
+    }
+    const cuenta = tokenDeGmail.cuenta;
+    const remitente = config.remitente?.correo;
+    if (cuenta && remitente && cuenta.toLowerCase() !== remitente.toLowerCase()) {
+      return {
+        ok: true,
+        mensaje: `Google aceptó las credenciales de ${cuenta}, pero CORREO_REMITENTE es ${remitente}: Gmail enviará como ${cuenta} salvo que ${remitente} sea un alias de esa cuenta.`,
+      };
+    }
+    return { ok: true, mensaje: `Google aceptó las credenciales${cuenta ? ` de ${cuenta}` : ''}: el correo puede salir por Gmail.` };
   }
   if (config.modo === 'api') {
     return { ok: null, mensaje: `Con la API de ${PROVEEDORES_API[config.api].nombre} no se puede comprobar sin enviar: usa «Enviar correo de prueba».` };
@@ -335,11 +488,11 @@ async function verificar() {
   }
 }
 
-// Al arrancar: dice en la consola cómo quedó el correo y, si es SMTP, comprueba la conexión sin detener el arranque.
+// Al arrancar: dice en la consola cómo quedó el correo y, si es SMTP o Gmail, comprueba las credenciales sin detener el arranque.
 async function comprobarAlArrancar() {
   const config = leerConfiguracion();
   config.avisos.forEach((aviso) => console.warn(`[correo] ${aviso}`));
-  if (config.modo !== 'smtp') return;
+  if (config.modo !== 'smtp' && !(config.modo === 'api' && config.api === 'gmail')) return;
   const resultado = await verificar();
   if (resultado.ok) console.log(`[correo] ${resultado.mensaje}`);
   else console.warn(`[correo] No se pudo verificar la conexión: ${resultado.mensaje}`);

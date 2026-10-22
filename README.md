@@ -155,14 +155,15 @@ servicio casi listo.
    contraseña (si lleva símbolos como `#` o `@`, escríbelos con `%` y su código). No uses la conexión directa: solo funciona por IPv6.
 2. **El código en GitHub.** Render publica la rama que elijas: sube la rama que lleva todo (por ejemplo `render/s5`).
 3. **Render.** En dashboard.render.com: **New → Blueprint**, conecta tu GitHub, elige este repositorio y esa rama, y escribe lo que
-   pide: `DATABASE_URL` (la cadena del paso 1) y las cuatro claves del panel (`CLAVE_ADMIN`, `CLAVE_CIRCULACION`, `CLAVE_TESIS` y
-   `CLAVE_CONSULTA`: nuevas y largas). **Apply**.
+   pide: `DATABASE_URL` (la cadena del paso 1) las cuatro claves del panel (`CLAVE_ADMIN`, `CLAVE_CIRCULACION`, `CLAVE_TESIS` y
+   `CLAVE_CONSULTA`: nuevas y largas) y las del correo con Gmail (`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` y
+   `CORREO_REMITENTE`, copiadas de `backend/.env` después de correr `npm run token-gmail`). **Apply**.
 4. **Primer arranque.** El primer build tarda varios minutos. En **Logs** debe aparecer `datos: PostgreSQL (...)`. Si la clave de la base
    es incorrecta o la base no es UTF8, el mensaje dice qué corregir.
 5. **Entra al panel.** `https://<tu-servicio>.onrender.com/privateAccess` con el usuario `admin` y la clave de `CLAVE_ADMIN`. En **Datos y
    respaldo** debe decir «Base de datos PostgreSQL» y «Conectada».
-6. **Correo.** En Render gratis los puertos SMTP están bloqueados: en **Environment** agrega `CORREO_API` (`brevo` o `resend`),
-   `CORREO_API_KEY` y `CORREO_REMITENTE` (ver «Correo»), y prueba desde el panel, sección **Correo**.
+6. **Correo.** En Render gratis los puertos SMTP están bloqueados: por eso se usa la API de Gmail (ver «Correo con Gmail»). En el
+   panel, sección **Correo**, pulsa **Comprobar la conexión** y manda un correo de prueba.
 7. **Respaldo automático.** Con el correo ya funcionando, agrega `RESPALDO_CORREO` con el correo de la biblioteca: cada semana llegará
    ahí un .zip con todo lo guardado. Compruébalo en **Datos y respaldo → Enviar respaldo ahora**.
 
@@ -191,17 +192,19 @@ de tu base y «Save password». **Parameters**: SSL mode `require`. **Save**. Lu
 
 ### Correo
 
-Los comprobantes de reservas y de solicitudes de solvencia llegan por correo (con el comprobante en HTML y en texto). Hay tres modos y
+Los comprobantes de reservas y de solicitudes de solvencia llegan por correo (con el comprobante en HTML y en texto). Hay cuatro modos y
 el servidor elige según sus variables (modelo en `backend/.env.example`):
 
-- **API de un servicio de correo** (`CORREO_API=brevo` o `resend`, con `CORREO_API_KEY`): la opción para la nube. Railway (planes
-  Free, Trial y Hobby) y Render (servicios gratuitos) bloquean los puertos SMTP, y la API va por HTTPS.
+- **API de Gmail** (`CORREO_API=gmail`, con `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET` y `GMAIL_REFRESH_TOKEN`): gratis con una cuenta
+  de Gmail normal (unos 500 correos al día) y va por HTTPS, así que funciona en Render y Railway. Ver «Correo con Gmail» abajo.
+- **API de otro servicio de correo** (`CORREO_API=brevo` o `resend`, con `CORREO_API_KEY`). Railway (planes Free, Trial y Hobby) y
+  Render (servicios gratuitos) bloquean los puertos SMTP, y la API va por HTTPS.
 - **SMTP** (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`): Gmail, Microsoft 365 o el servidor de la universidad. Gmail y
   Microsoft 365 piden una «contraseña de aplicación».
 - **Simulado** (sin nada configurado): los correos se arman pero no salen. La pantalla de comprobante lo explica a quien lo pide.
 
 `CORREO_REMITENTE` es la dirección desde la que se envía (en la API debe estar verificada en el servicio). En el panel, **Correo**
-(solo el administrador), se ve cómo quedó, se comprueba la conexión SMTP, se manda un correo de prueba y se ven los últimos
+(solo el administrador), se ve cómo quedó, se comprueba la conexión (SMTP o Gmail), se manda un correo de prueba y se ven los últimos
 envíos con sus errores. Si el correo falla, la reserva o la solicitud siguen adelante: la persona tiene su comprobante en pantalla.
 
 Si la persona dejó su correo, el comprobante sale **solo al confirmar** y la pantalla dice cómo le fue (enviado, en camino, falló o
@@ -209,6 +212,40 @@ correo apagado); el campo para mandarlo aparece solo si no dejó correo, si el e
 comprobante en pantalla tiene el mismo diseño y los mismos datos que el correo (franja azul con la biblioteca, línea roja, los datos y
 las indicaciones). **Imprimir comprobante** imprime esa misma hoja en tamaño carta; en el kiosco imprime el ticket angosto de 80 mm
 para la impresora térmica.
+
+#### Correo con Gmail (gratis y sin que venza el token)
+
+Se hace una sola vez, con la cuenta de Gmail que enviará los correos (mejor una de la biblioteca que una personal):
+
+1. **Proyecto.** En [Google Cloud Console](https://console.cloud.google.com/) crea un proyecto (por ejemplo «Biblioteca correo»). No
+   pide tarjeta: la API de Gmail es gratuita.
+2. **Activar la API.** **APIs y servicios → Biblioteca**, busca **Gmail API** y pulsa **Habilitar**.
+3. **Pantalla de consentimiento.** **APIs y servicios → Pantalla de consentimiento de OAuth** (o **Google Auth Platform**): tipo
+   **Externo**, nombre de la app «Biblioteca», tu correo como soporte y contacto. En **Permisos** (Data access) no hace falta agregar nada.
+4. **Publicar la app (lo que evita que el token venza).** En **Público** (Audience) pulsa **Publicar app** para pasarla a **En producción**.
+   Si se queda en **Prueba**, Google anula el refresh token **a los 7 días** y el correo deja de salir. No hace falta pedir la
+   verificación de Google: como la usa solo tu cuenta, basta con aceptar el aviso «Google no verificó esta app» (Avanzado → Ir a
+   Biblioteca).
+5. **Credenciales.** **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**, tipo **App de escritorio**.
+   Descarga el JSON (botón de descarga) y guárdalo fuera del repositorio.
+6. **Generar el token.** En tu computadora:
+
+   ```bash
+   cd backend
+   npm run token-gmail -- ruta/al/client_secret_XXXX.json
+   ```
+
+   Se abre el navegador: entra con la cuenta de Gmail y acepta «Enviar correo electrónico en tu nombre». El script escribe en
+   `backend/.env` `CORREO_API=gmail`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` y `CORREO_REMITENTE` (si no
+   estaba), y los muestra en la consola. Si ya pusiste `GMAIL_CLIENT_ID` y `GMAIL_CLIENT_SECRET` en `.env`, basta `npm run token-gmail`.
+7. **Publicado.** En Render, **Environment**, agrega esas mismas cinco variables y guarda (se reinicia solo). En el panel, **Correo →
+   Comprobar la conexión** debe decir «Google aceptó las credenciales de tu-cuenta@gmail.com»; después manda un correo de prueba.
+
+El servidor guarda en memoria el token de acceso (dura una hora) y pide otro solo antes de que venza: no hay que hacer nada más. El
+refresh token sigue sirviendo indefinidamente salvo que: la app vuelva a **Prueba**; se quite el acceso en
+[myaccount.google.com/permissions](https://myaccount.google.com/permissions); se cambie la contraseña de la cuenta; o pasen 6 meses
+sin usarlo. En esos casos el panel lo dice («Google ya no acepta GMAIL_REFRESH_TOKEN») y basta repetir el paso 6. `CORREO_REMITENTE`
+debe ser esa misma cuenta (o un alias suyo configurado en Gmail); el nombre entre comillas es el que verá quien reciba el correo.
 
 ### Cargar el catálogo
 

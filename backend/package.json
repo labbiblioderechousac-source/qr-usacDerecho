@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "importar": "node scripts/importar-datos.js",
-    "test": "node pruebas/correr.mjs"
+    "test": "node pruebas/correr.mjs",
+    "token-gmail": "node scripts/token-gmail.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

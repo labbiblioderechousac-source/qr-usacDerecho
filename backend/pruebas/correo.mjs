@@ -29,7 +29,7 @@ const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- Servidor de la biblioteca ---------------------------------------------------------------------------------------
 
-const SIN_CORREO = { SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: '', SMTP_PASS: '', SMTP_FROM: '', SMTP_SECURE: '', CORREO_API: '', CORREO_API_KEY: '', CORREO_REMITENTE: '', CORREO_API_URL: '', CORREO_TIEMPO_MS: '', NODE_ENV: '' };
+const SIN_CORREO = { SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: '', SMTP_PASS: '', SMTP_FROM: '', SMTP_SECURE: '', CORREO_API: '', CORREO_API_KEY: '', CORREO_REMITENTE: '', CORREO_API_URL: '', CORREO_TIEMPO_MS: '', GMAIL_CLIENT_ID: '', GMAIL_CLIENT_SECRET: '', GMAIL_REFRESH_TOKEN: '', GMAIL_TOKEN_URL: '', NODE_ENV: '' };
 
 async function iniciar(puerto, env = {}) {
   const salida = [];
@@ -393,6 +393,120 @@ async function porApi(proveedor) {
   }
 }
 
+// Imita a Google: /token cambia el refresh token por un token de acceso («acceso-1», «acceso-2»...) y /envio recibe el mensaje MIME.
+function iniciarGoogle(puerto) {
+  const tokens = [];
+  const envios = [];
+  const comportamiento = { tokenEstado: 200, tokenCuerpo: null, envioEstado: 200, envioCuerpo: { id: 'm1' }, anulados: new Set() };
+  const servidor = http.createServer((req, res) => {
+    const partes = [];
+    req.on('data', (d) => partes.push(d));
+    req.on('end', async () => {
+      const cuerpo = Buffer.concat(partes);
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/token') {
+        tokens.push(Object.fromEntries(new URLSearchParams(cuerpo.toString())));
+        const idToken = `x.${Buffer.from(JSON.stringify({ email: 'biblioteca@gmail.com' })).toString('base64url')}.y`;
+        res.writeHead(comportamiento.tokenEstado);
+        res.end(JSON.stringify(comportamiento.tokenCuerpo ?? { access_token: `acceso-${tokens.length}`, expires_in: 3599, id_token: idToken }));
+        return;
+      }
+      envios.push({ cabeceras: req.headers, correo: await simpleParser(cuerpo).catch(() => null) });
+      if (comportamiento.anulados.has(req.headers.authorization)) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: { code: 401, message: 'Invalid Credentials' } }));
+        return;
+      }
+      res.writeHead(comportamiento.envioEstado);
+      res.end(JSON.stringify(comportamiento.envioCuerpo));
+    });
+  });
+  return new Promise((resolve) => servidor.listen(puerto, '127.0.0.1', () => resolve({ tokens, envios, comportamiento, parar: () => servidor.close() })));
+}
+
+async function porGmail() {
+  console.log('Modo API de Gmail (Google falso)');
+  const google = await iniciarGoogle(4035);
+  const env = {
+    CORREO_API: 'gmail',
+    GMAIL_CLIENT_ID: 'cliente.apps.googleusercontent.com',
+    GMAIL_CLIENT_SECRET: 'secreto-del-cliente',
+    GMAIL_REFRESH_TOKEN: 'refresh-token-secreto',
+    CORREO_REMITENTE: '"Biblioteca de Prueba" <biblioteca@gmail.com>',
+    GMAIL_TOKEN_URL: 'http://127.0.0.1:4035/token',
+    CORREO_API_URL: 'http://127.0.0.1:4035/envio',
+  };
+  const srv = await iniciar(4036, env);
+  try {
+    const admin = await srv.entrar('admin');
+    let r = await srv.llamar('GET', '/admin/correo', { token: admin });
+    ok(r.datos.modo === 'api' && r.datos.descripcion === 'API de Gmail' && r.datos.verificable === true, 'el estado dice Gmail y que se puede comprobar');
+    ok(!/refresh-token-secreto|secreto-del-cliente/.test(JSON.stringify(r.datos)), 'ni el token ni el secreto aparecen');
+    ok(google.tokens.length === 1 && /credenciales de biblioteca@gmail\.com/.test(srv.salida.join('')), 'al arrancar comprueba las credenciales');
+
+    r = await srv.llamar('POST', '/admin/correo/verificar', { token: admin, cuerpo: {} });
+    ok(r.datos.ok === true && /biblioteca@gmail\.com/.test(r.datos.mensaje), `verificar pide un token y dice la cuenta (${r.datos.mensaje})`);
+    const t = google.tokens.at(-1);
+    ok(t?.grant_type === 'refresh_token' && t?.refresh_token === 'refresh-token-secreto' && t?.client_id === env.GMAIL_CLIENT_ID, 'el token se pide con el refresh token');
+    ok(google.envios.length === 0, 'verificar no manda ningún correo');
+
+    const emitidos = google.tokens.length;
+    r = await srv.llamar('POST', '/admin/correo/prueba', { token: admin, cuerpo: { para: 'persona@ejemplo.com' } });
+    ok(r.estado === 200 && r.datos.via === 'gmail' && r.datos.simulado === false, 'la prueba sale por Gmail');
+    const e = google.envios[0];
+    ok(e?.cabeceras.authorization === `Bearer acceso-${emitidos}` && google.tokens.length === emitidos, 'reutiliza el token de acceso vigente');
+    ok(e?.cabeceras['content-type'] === 'message/rfc822', 'manda el mensaje MIME tal cual');
+    ok(e?.correo?.from.value[0].address === 'biblioteca@gmail.com' && e?.correo?.from.value[0].name === 'Biblioteca de Prueba', 'remitente con nombre');
+    ok(e?.correo?.to.value[0].address === 'persona@ejemplo.com' && e?.correo?.subject === 'Correo de prueba de la biblioteca', 'destinatario y asunto');
+    ok(/<h1/.test(e?.correo?.html ?? '') && /Correo de prueba/.test(e?.correo?.text ?? ''), 'trae HTML y texto');
+
+    console.log('  Confirmación de reserva');
+    const reserva = await reservar(srv, { correo: 'ana@ejemplo.com' });
+    await pausa(500);
+    const conf = google.envios.find((x) => x.correo?.subject === `Confirmación de reserva ${reserva.datos?.id}`);
+    ok(conf && (conf.correo.text ?? '').includes(reserva.datos.codigoConfirmacion), 'la confirmación sale por Gmail con su código');
+
+    console.log('  Token de acceso anulado antes de tiempo');
+    google.comportamiento.anulados.add(`Bearer acceso-${google.tokens.length}`);
+    const antes = google.tokens.length;
+    r = await srv.llamar('POST', '/admin/correo/prueba', { token: await srv.otroAdmin(admin), cuerpo: { para: 'persona@ejemplo.com' } });
+    ok(r.estado === 200 && google.tokens.length === antes + 1, `con un 401 pide otro token y vuelve a intentar (${r.estado} ${r.error ?? ''})`);
+
+    console.log('  Refresh token anulado (app en modo «Prueba» o acceso quitado)');
+    google.comportamiento.tokenEstado = 400;
+    google.comportamiento.tokenCuerpo = { error: 'invalid_grant', error_description: 'Token has been expired or revoked.' };
+    r = await srv.llamar('POST', '/admin/correo/verificar', { token: admin, cuerpo: {} });
+    ok(r.datos.ok === false && /npm run token-gmail/.test(r.datos.mensaje) && /Publicar app/.test(r.datos.mensaje), `verificar explica cómo arreglarlo (${r.datos.mensaje})`);
+    r = await srv.llamar('POST', '/admin/correo/prueba', { token: await srv.otroAdmin(admin), cuerpo: { para: 'persona@ejemplo.com' } });
+    ok(r.estado === 502 && /GMAIL_REFRESH_TOKEN/.test(r.error ?? '') && !/refresh-token-secreto/.test(r.error ?? ''), 'la prueba falla con el mismo consejo, sin mostrar el token');
+
+    console.log('  Cliente equivocado y envío rechazado');
+    google.comportamiento.tokenCuerpo = { error: 'invalid_client', error_description: 'The OAuth client was not found.' };
+    r = await srv.llamar('POST', '/admin/correo/verificar', { token: admin, cuerpo: {} });
+    ok(r.datos.ok === false && /GMAIL_CLIENT_ID o GMAIL_CLIENT_SECRET/.test(r.datos.mensaje), 'un cliente equivocado se explica');
+    google.comportamiento.tokenEstado = 200;
+    google.comportamiento.tokenCuerpo = null;
+    google.comportamiento.envioEstado = 403;
+    google.comportamiento.envioCuerpo = { error: { code: 403, message: 'Gmail API has not been used in project 123' } };
+    await srv.llamar('POST', '/admin/correo/verificar', { token: admin, cuerpo: {} }); // vuelve a tener un token de acceso válido
+    r = await srv.llamar('POST', '/admin/correo/prueba', { token: await srv.otroAdmin(admin), cuerpo: { para: 'persona@ejemplo.com' } });
+    ok(r.estado === 502 && /Gmail API has not been used/.test(r.error ?? '') && /habilitada/.test(r.error ?? ''), `un 403 dice qué revisar (${r.error})`);
+  } finally {
+    srv.parar();
+    google.parar();
+  }
+
+  console.log('  Gmail sin todas sus variables');
+  const incompleto = await iniciar(4037, { CORREO_API: 'gmail', GMAIL_CLIENT_ID: 'x', CORREO_REMITENTE: 'b@gmail.com' });
+  try {
+    const admin = await incompleto.entrar('admin');
+    const r = await incompleto.llamar('GET', '/admin/correo', { token: admin });
+    ok(r.datos.modo === 'simulado' && r.datos.avisos.some((a) => /GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN/.test(a) && /token-gmail/.test(a)), 'avisa qué falta y cómo generarlo');
+  } finally {
+    incompleto.parar();
+  }
+}
+
 async function configuracionIncompleta() {
   console.log('Configuración incompleta o equivocada');
   const casos = [
@@ -428,6 +542,7 @@ try {
   await sinRespuesta();
   await porApi('brevo');
   await porApi('resend');
+  await porGmail();
   await configuracionIncompleta();
 } finally {
   console.log(`\n${comprobaciones} comprobaciones: ${fallos === 0 ? 'TODO BIEN' : `${fallos} FALLAS`}`);

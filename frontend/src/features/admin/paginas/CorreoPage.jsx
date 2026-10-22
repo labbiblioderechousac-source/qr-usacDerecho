@@ -148,13 +148,17 @@ export default function CorreoPage() {
           </Dato>
         </dl>
 
-        {datos.modo === 'smtp' ? (
+        {datos.verificable ? (
           <div className="flex flex-col gap-3 border-t border-border pt-4">
             <div className="flex flex-wrap items-center gap-3">
               <Button variant="secondary" icon={PlugZap} onClick={verificar} disabled={verificando}>
                 {verificando ? 'Comprobando...' : 'Comprobar la conexión'}
               </Button>
-              <span className="text-xs text-slate-500">Abre la conexión y revisa el usuario y la clave sin mandar ningún correo.</span>
+              <span className="text-xs text-slate-500">
+                {datos.modo === 'smtp'
+                  ? 'Abre la conexión y revisa el usuario y la clave sin mandar ningún correo.'
+                  : 'Pide a Google un token de acceso con el refresh token, sin mandar ningún correo.'}
+              </span>
             </div>
             {verificacion ? (
               <Nota tono={verificacion.ok ? 'ok' : 'error'}>{verificacion.mensaje}</Nota>
@@ -255,10 +259,19 @@ export default function CorreoPage() {
         <div className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-slate-700">
           <p>
             El correo se define con variables de entorno del servidor: en la plataforma donde se publique la biblioteca, o en <Variable>backend/.env</Variable>{' '}
-            en un equipo propio. Después de cambiarlas hay que reiniciar el servidor. Hay dos caminos:
+            en un equipo propio. Después de cambiarlas hay que reiniciar el servidor. Hay tres caminos:
           </p>
           <div>
-            <p className="font-semibold text-slate-900">A. API de un servicio de correo (la opción para la nube)</p>
+            <p className="font-semibold text-slate-900">A. API de Gmail (gratis, funciona en la nube)</p>
+            <p>
+              <Variable>CORREO_API</Variable> con <Variable>gmail</Variable>, <Variable>GMAIL_CLIENT_ID</Variable>, <Variable>GMAIL_CLIENT_SECRET</Variable>,{' '}
+              <Variable>GMAIL_REFRESH_TOKEN</Variable> y <Variable>CORREO_REMITENTE</Variable> con la misma cuenta de Gmail. El token se genera en un equipo
+              con <Variable>npm run token-gmail</Variable> (dentro de <Variable>backend</Variable>), que además deja todo escrito en <Variable>backend/.env</Variable>.
+              Para que el token no venza, la app de Google debe estar «En producción», no en «Prueba» (pasos en el README, «Correo con Gmail»).
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">B. API de otro servicio de correo</p>
             <p>
               <Variable>CORREO_API</Variable> con <Variable>brevo</Variable> o <Variable>resend</Variable>, <Variable>CORREO_API_KEY</Variable> con la clave
               que da el servicio y <Variable>CORREO_REMITENTE</Variable> con una dirección que hayas verificado allí, por ejemplo{' '}
@@ -266,7 +279,7 @@ export default function CorreoPage() {
             </p>
           </div>
           <div>
-            <p className="font-semibold text-slate-900">B. SMTP (Gmail, Microsoft 365, el correo de la universidad…)</p>
+            <p className="font-semibold text-slate-900">C. SMTP (Gmail, Microsoft 365, el correo de la universidad…)</p>
             <p>
               <Variable>SMTP_HOST</Variable>, <Variable>SMTP_PORT</Variable> (587, o 465 con conexión segura), <Variable>SMTP_USER</Variable>,{' '}
               <Variable>SMTP_PASS</Variable> y, si el usuario no es un correo, <Variable>CORREO_REMITENTE</Variable>. Con Gmail y Microsoft 365 hace falta
@@ -274,7 +287,7 @@ export default function CorreoPage() {
             </p>
           </div>
           <Nota tono="aviso" titulo="Ojo con las plataformas gratuitas">
-            Railway (planes Free, Trial y Hobby) y Render (servicios gratuitos) bloquean los puertos SMTP: ahí el camino B no funciona y hay que usar el A.
+            Railway (planes Free, Trial y Hobby) y Render (servicios gratuitos) bloquean los puertos SMTP: ahí el camino C no funciona y hay que usar el A o el B.
           </Nota>
         </div>
       </details>

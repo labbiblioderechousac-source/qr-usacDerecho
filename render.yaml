@@ -31,3 +31,15 @@ services:
         sync: false
       - key: CLAVE_CONSULTA
         sync: false
+      # Correo con la API de Gmail (gratis; los puertos SMTP están bloqueados en el plan gratuito). Los cuatro valores los genera
+      # `npm run token-gmail` en backend/.env: cópialos de ahí. Ver README, «Correo con Gmail».
+      - key: CORREO_API
+        value: gmail
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
+      - key: CORREO_REMITENTE
+        sync: false
