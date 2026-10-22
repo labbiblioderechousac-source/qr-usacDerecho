@@ -33,7 +33,10 @@ function limpiarUrl(valor) {
   let texto = String(valor ?? '').trim();
   texto = texto.replace(/^DATABASE_URL\s*=\s*/i, '').trim();
   const comillas = texto.match(/^(["'])([\s\S]*)\1$/);
-  return comillas ? comillas[2].trim() : texto;
+  if (comillas) texto = comillas[2].trim();
+  // Si al pegarla se perdió el «postgresql:» del principio (queda «//usuario:clave@servidor...»), se repone.
+  if (/^\/\/[^/]/.test(texto)) texto = `postgresql:${texto}`;
+  return texto;
 }
 
 // Qué tiene de raro una dirección que no se pudo leer, sin mostrar nunca la clave (solo el principio, que es el tipo de dirección).
