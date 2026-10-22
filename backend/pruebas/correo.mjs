@@ -496,6 +496,28 @@ async function porGmail() {
     google.parar();
   }
 
+  console.log('  Gmail sin CORREO_REMITENTE, o con la variable mal pegada');
+  const otroGoogle = await iniciarGoogle(4038);
+  const sinRemitente = { ...env, CORREO_REMITENTE: '', GMAIL_TOKEN_URL: 'http://127.0.0.1:4038/token', CORREO_API_URL: 'http://127.0.0.1:4038/envio' };
+  const mal = '"Biblioteca de Prueba <biblioteca@gmail.com>\nRESPALDO_CORREO=biblioteca@gmail.com"';
+  for (const [nombre, valor, puerto] of [['sin remitente', '', 4039], ['comilla sin cerrar y otra línea', mal, 4040]]) {
+    const s = await iniciar(puerto, { ...sinRemitente, CORREO_REMITENTE: valor });
+    try {
+      const admin = await s.entrar('admin');
+      let r = await s.llamar('GET', '/admin/correo', { token: admin });
+      ok(/biblioteca@gmail\.com/.test(r.datos.remitente ?? ''), `${nombre}: el panel muestra el remitente (${r.datos.remitente})`);
+      r = await s.llamar('POST', '/admin/correo/prueba', { token: admin, cuerpo: { para: 'persona@ejemplo.com' } });
+      ok(r.estado === 200 && r.datos.via === 'gmail', `${nombre}: la prueba sale (${r.estado} ${r.error ?? ''})`);
+      const de = otroGoogle.envios.at(-1)?.correo?.from.value[0];
+      ok(de?.address === 'biblioteca@gmail.com', `${nombre}: sale desde la cuenta de Gmail (${de?.address})`);
+      if (!valor) ok(de?.name === 'Biblioteca «Francisco Rolando Velázquez González»', `sin remitente: con el nombre de la biblioteca (${de?.name})`);
+      else ok(de?.name === 'Biblioteca de Prueba', `mal pegada: conserva el nombre escrito (${de?.name})`);
+    } finally {
+      s.parar();
+    }
+  }
+  otroGoogle.parar();
+
   console.log('  Gmail sin todas sus variables');
   const incompleto = await iniciar(4037, { CORREO_API: 'gmail', GMAIL_CLIENT_ID: 'x', CORREO_REMITENTE: 'b@gmail.com' });
   try {

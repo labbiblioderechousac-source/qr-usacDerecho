@@ -90,7 +90,8 @@ function leerConfiguracion() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const puerto = Number(process.env.SMTP_PORT) || 587;
   const usuario = String(process.env.SMTP_USER || '').trim();
-  const textoRemitente = String(process.env.CORREO_REMITENTE || process.env.SMTP_FROM || '').trim();
+  // Al pegar la variable a mano en una plataforma se puede colar la línea siguiente (por una comilla sin cerrar): vale solo la primera.
+  const textoRemitente = String(process.env.CORREO_REMITENTE || process.env.SMTP_FROM || '').split(/\r?\n/)[0].trim();
   const gmail = {
     clienteId: String(process.env.GMAIL_CLIENT_ID || '').trim(),
     clienteSecreto: String(process.env.GMAIL_CLIENT_SECRET || '').trim(),
@@ -122,12 +123,10 @@ function leerConfiguracion() {
       avisos.push('Falta CORREO_REMITENTE: el usuario de SMTP no es un correo y el servicio exige un remitente verificado.');
     }
   }
-  if (!remitente && modo === 'api' && !textoRemitente) {
-    avisos.push(
-      api === 'gmail'
-        ? 'Falta CORREO_REMITENTE: escribe la cuenta de Gmail con la que se generó el token, por ejemplo "Biblioteca" <biblioteca@gmail.com>.'
-        : 'Falta CORREO_REMITENTE: la API solo envía desde un remitente que hayas verificado en el servicio.',
-    );
+  if (!remitente && modo === 'api' && api === 'gmail') {
+    avisos.push('Sin un CORREO_REMITENTE válido, el correo sale desde la cuenta de Gmail con la que se generó el token y con el nombre de la biblioteca.');
+  } else if (!remitente && modo === 'api' && !textoRemitente) {
+    avisos.push('Falta CORREO_REMITENTE: la API solo envía desde un remitente que hayas verificado en el servicio.');
   }
   if (modo === 'simulado' && process.env.NODE_ENV === 'production') {
     avisos.push('El correo está en modo simulado: los comprobantes por correo NO salen. Configura SMTP o una API de correo para que salgan de verdad.');
@@ -235,6 +234,12 @@ async function enviarPorApi(config, { para, asunto, texto, html, adjuntos }) {
   if (!respuesta.ok) {
     throw new Error(mensajeDeApi(proveedor, respuesta.status, await detalleDeRespuesta(respuesta)));
   }
+}
+
+// Gmail envía siempre desde la cuenta del token: si CORREO_REMITENTE falta o está mal escrito, se usa esa cuenta (cuando ya se conoce).
+function remitenteEfectivo(config) {
+  if (config.remitente || config.modo !== 'api' || config.api !== 'gmail' || !tokenDeGmail.cuenta) return config.remitente;
+  return { nombre: biblioteca.nombre, correo: tokenDeGmail.cuenta };
 }
 
 function nombreDelServicio(config) {
@@ -379,6 +384,10 @@ async function enviarCorreo({ para, asunto, texto, html, tipo = 'otro', adjuntos
     estado: config.modo === 'simulado' ? 'simulado' : 'enviado',
   };
   try {
+    if (config.modo === 'api' && config.api === 'gmail' && !config.remitente) {
+      await tokenDeAccesoDeGmail(config); // así se conoce la cuenta
+      config.remitente = remitenteEfectivo(config);
+    }
     if (config.modo !== 'simulado' && !config.remitente) {
       throw new Error('Falta CORREO_REMITENTE: no se sabe desde qué dirección enviar.');
     }
@@ -432,7 +441,7 @@ function estado() {
     usuario: config.modo === 'smtp' && config.usuario ? ocultarUsuario(config.usuario) : null,
     // SMTP y Gmail se pueden comprobar sin mandar nada; Brevo y Resend no.
     verificable: config.modo === 'smtp' || (config.modo === 'api' && config.api === 'gmail'),
-    remitente: config.remitente ? `${config.remitente.nombre} <${config.remitente.correo}>` : null,
+    remitente: remitenteEfectivo(config) ? `${remitenteEfectivo(config).nombre} <${remitenteEfectivo(config).correo}>` : null,
     avisos: config.avisos,
     ultimoEnvio,
     ultimoError,
