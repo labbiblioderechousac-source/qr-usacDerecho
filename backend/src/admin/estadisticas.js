@@ -230,21 +230,27 @@ function hojasDelExcel(filtro) {
     [(j) => `acceso_qr_${j}`, 'Escaneos de QR'],
   ];
   const valorDe = (dia, claves) => [].concat(claves).reduce((suma, clave) => suma + (porDia.get(dia)[clave] ?? 0), 0);
+  // Entre una jornada y la otra va una columna angosta vacía, y la vespertina lleva su encabezado en rojo: así no quedan pegadas.
+  const COLOR_DE_LA_JORNADA = { jm: 'azul', jv: 'rojo' };
+  const ancho = deLaJornada.length + 1; // sus columnas y el separador
   const hojaPorJornada = {
     nombre: 'Por jornada',
     titulo: titulo('Uso por jornada'),
     nota: 'Reservas por su hora de inicio; búsquedas, consultas y escaneos por la hora en que ocurrieron. Fines de semana sombreados.',
-    grupos: JORNADAS.map((j, i) => ({ titulo: j.titulo, desde: 2 + i * deLaJornada.length, hasta: 1 + (i + 1) * deLaJornada.length })),
+    grupos: JORNADAS.map((j, i) => ({ titulo: j.titulo, desde: 2 + i * ancho, hasta: 1 + i * ancho + deLaJornada.length, color: COLOR_DE_LA_JORNADA[j.clave] })),
     columnas: [
       { titulo: unSoloMes ? 'Día' : 'Fecha', ancho: unSoloMes ? 7 : 12 },
       { titulo: 'Día de la semana', ancho: 11 },
-      ...JORNADAS.flatMap(() => deLaJornada.map(([, t]) => ({ titulo: t, ancho: 12 }))),
+      ...JORNADAS.flatMap((j, i) => [
+        ...(i > 0 ? [{ titulo: '', ancho: 2, separador: true }] : []),
+        ...deLaJornada.map(([, t]) => ({ titulo: t, ancho: 12, color: COLOR_DE_LA_JORNADA[j.clave] })),
+      ]),
     ],
     filas: dias.map((dia) => ({
       valores: [
         unSoloMes ? Number(dia.slice(8, 10)) : fechaLegible(dia),
         diaDeLaSemana(dia),
-        ...JORNADAS.flatMap((j) => deLaJornada.map(([clave]) => valorDe(dia, clave(j.clave)))),
+        ...JORNADAS.flatMap((j, i) => [...(i > 0 ? [null] : []), ...deLaJornada.map(([clave]) => valorDe(dia, clave(j.clave)))]),
       ],
       sombreada: esFinDeSemana(dia),
     })),

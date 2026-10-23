@@ -7,10 +7,13 @@ const { crearZip } = require('./zip');
 // `hojas`: [{ nombre, titulo?, nota?, grupos?, columnas: [{ titulo, ancho? }], filas: [{ valores: [...], sombreada? }], totales? }]
 //   - valores: número, texto o null (celda vacía).
 //   - totales: true agrega al final una fila «Total» que suma cada columna numérica.
-//   - grupos: [{ titulo, desde, hasta }] agrega encima de los encabezados una fila con el nombre de cada grupo de columnas (índices
-//     desde/hasta, incluidos), en una celda combinada: por ejemplo «Jornada matutina (JM)» sobre sus columnas.
+//   - grupos: [{ titulo, desde, hasta, color? }] agrega encima de los encabezados una fila con el nombre de cada grupo de columnas
+//     (índices desde/hasta, incluidos), en una celda combinada: por ejemplo «Jornada matutina (JM)» sobre sus columnas.
+//   - una columna con `separador: true` queda vacía en todas las filas (una línea en blanco entre dos grupos); con `color: 'rojo'` su
+//     encabezado va en rojo en vez de azul (lo mismo un grupo), para distinguir un grupo del otro.
 
-const ESTILO = { normal: 0, encabezado: 1, titulo: 2, total: 3, sombreada: 4, nota: 5 };
+const ESTILO = { normal: 0, encabezado: 1, titulo: 2, total: 3, sombreada: 4, nota: 5, encabezadoRojo: 6 };
+const encabezadoDe = (color) => (color === 'rojo' ? ESTILO.encabezadoRojo : ESTILO.encabezado);
 
 function letraDeColumna(indice) {
   let n = indice + 1;
@@ -59,18 +62,18 @@ function hojaXml({ titulo, nota, grupos = [], columnas, filas, totales }) {
       return columnas
         .map((_, i) => {
           const grupo = grupos.find((g) => g.desde === i);
-          const dentro = grupos.some((g) => i >= g.desde && i <= g.hasta);
-          return celda(`${letraDeColumna(i)}${n}`, grupo ? grupo.titulo : null, dentro ? ESTILO.encabezado : ESTILO.normal);
+          const dentro = grupos.find((g) => i >= g.desde && i <= g.hasta);
+          return celda(`${letraDeColumna(i)}${n}`, grupo ? grupo.titulo : null, dentro ? encabezadoDe(dentro.color) : ESTILO.normal);
         })
         .join('');
     }, 22);
   }
   const filaDelEncabezado = numero + 1;
-  agregar((n) => columnas.map((c, i) => celda(`${letraDeColumna(i)}${n}`, c.titulo, ESTILO.encabezado)).join(''), 32);
+  agregar((n) => columnas.map((c, i) => celda(`${letraDeColumna(i)}${n}`, c.separador ? null : c.titulo, c.separador ? ESTILO.normal : encabezadoDe(c.color))).join(''), 32);
   const primeraDeDatos = numero + 1;
   filas.forEach((fila) => {
     const estilo = fila.sombreada ? ESTILO.sombreada : ESTILO.normal;
-    agregar((n) => fila.valores.map((v, i) => celda(`${letraDeColumna(i)}${n}`, v, estilo)).join(''));
+    agregar((n) => fila.valores.map((v, i) => (columnas[i]?.separador ? celda(`${letraDeColumna(i)}${n}`, null, ESTILO.normal) : celda(`${letraDeColumna(i)}${n}`, v, estilo))).join(''));
   });
   const ultimaDeDatos = numero;
 
@@ -79,6 +82,7 @@ function hojaXml({ titulo, nota, grupos = [], columnas, filas, totales }) {
       columnas
         .map((c, i) => {
           const letra = letraDeColumna(i);
+          if (c.separador) return celda(`${letra}${n}`, null, ESTILO.normal);
           if (i === 0) return celda(`${letra}${n}`, 'Total', ESTILO.total);
           const numeros = filas.map((f) => f.valores[i]).filter((v) => typeof v === 'number');
           if (numeros.length === 0) return celda(`${letra}${n}`, null, ESTILO.total);
@@ -103,7 +107,7 @@ function hojaXml({ titulo, nota, grupos = [], columnas, filas, totales }) {
   );
 }
 
-// Los estilos, en el orden de ESTILO. Colores de la biblioteca: azul #1E3A8A, fondo #F3F5F9.
+// Los estilos, en el orden de ESTILO. Colores de la biblioteca: azul #1E3A8A, rojo #B91C1C, fondo #F3F5F9.
 const ESTILOS =
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
@@ -114,25 +118,27 @@ const ESTILOS =
   '<font><b/><sz val="11"/><name val="Calibri"/></font>' +
   '<font><i/><sz val="10"/><color rgb="FF475569"/><name val="Calibri"/></font>' +
   '</fonts>' +
-  '<fills count="5">' +
+  '<fills count="6">' +
   '<fill><patternFill patternType="none"/></fill>' +
   '<fill><patternFill patternType="gray125"/></fill>' +
   '<fill><patternFill patternType="solid"><fgColor rgb="FF1E3A8A"/><bgColor indexed="64"/></patternFill></fill>' +
   '<fill><patternFill patternType="solid"><fgColor rgb="FFE3E9F5"/><bgColor indexed="64"/></patternFill></fill>' +
   '<fill><patternFill patternType="solid"><fgColor rgb="FFF3F5F9"/><bgColor indexed="64"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFB91C1C"/><bgColor indexed="64"/></patternFill></fill>' +
   '</fills>' +
   '<borders count="2">' +
   '<border><left/><right/><top/><bottom/><diagonal/></border>' +
   '<border><left/><right/><top style="thin"><color rgb="FF1E3A8A"/></top><bottom/><diagonal/></border>' +
   '</borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-  '<cellXfs count="6">' +
+  '<cellXfs count="7">' +
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
   '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
   '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
   '<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>' +
   '<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>' +
   '<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '<xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
   '</cellXfs>' +
   '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
   '</styleSheet>';

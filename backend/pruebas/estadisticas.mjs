@@ -129,12 +129,14 @@ try {
   ok(fila(7, 'T-2021-00045')?.[6] === 1, 'la hoja «Tesis» trae el escaneo de QR');
   // Por jornada: JM hasta las 12:59 y JV desde las 13:00, cada una con cubículos, estaciones, sala, OPAC, tesis y QR.
   const porJornada = archivos['xl/worksheets/sheet2.xml'];
-  ok(porJornada.includes('<mergeCell ref="C4:H4"/>') && porJornada.includes('<mergeCell ref="I4:N4"/>'), 'los encabezados JM y JV van combinados sobre sus columnas');
+  ok(porJornada.includes('<mergeCell ref="C4:H4"/>') && porJornada.includes('<mergeCell ref="J4:O4"/>'), 'los encabezados JM y JV van combinados sobre sus columnas');
+  ok(porJornada.includes('<col min="9" max="9" width="2"') && porJornada.includes('<c r="I5" s="0"/>'), 'entre JM y JV hay una columna angosta vacía que las separa');
+  ok(porJornada.includes('<c r="J4" s="6"') && porJornada.includes('<c r="C4" s="1"'), 'JM con encabezado azul y JV con encabezado rojo');
   ok(porJornada.includes('Jornada matutina (JM)') && porJornada.includes('Jornada vespertina (JV)'), 'con sus nombres');
   const j7 = fila(2, 7);
-  ok(j7?.[1] === 'Lunes' && j7?.[3] === 1 && j7?.[5] === 1 && j7?.[11] === 1, `el día 7: en JM 1 estación y 1 búsqueda; en JV la búsqueda de las 23:30 (${JSON.stringify(j7)})`);
+  ok(j7?.[1] === 'Lunes' && j7?.[3] === 1 && j7?.[5] === 1 && j7?.[12] === 1, `el día 7: en JM 1 estación y 1 búsqueda; en JV la búsqueda de las 23:30 (${JSON.stringify(j7)})`);
   const j14 = fila(2, 14);
-  ok(j14?.[2] === 0 && j14?.[8] === 1, `el día 14: el cubículo de las 14:00 cuenta en JV (${JSON.stringify(j14)})`);
+  ok(j14?.[2] === 0 && j14?.[9] === 1 && j14?.[8] === null, `el día 14: el cubículo de las 14:00 cuenta en JV (${JSON.stringify(j14)})`);
   ok((porJornada.match(/<row r="\d+"/g) ?? []).length === 4 + 1 + 30 + 1, 'título, nota, espacio, jornadas, encabezados, 30 días y el total');
   ok(!/2019R-00|Alguien/.test(Object.values(archivos).join('')), 'no lleva nombres ni carnés');
   const malo = await fetch(`${servidor.base}/api/admin/estadisticas/excel?desde=2026-13-01`, { headers: { Authorization: `Bearer ${token}` } });
