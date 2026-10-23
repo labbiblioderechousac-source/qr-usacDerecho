@@ -5,6 +5,8 @@ export const adminApi = {
   usuarios: (q) => axiosClient.get('/admin/usuarios', { params: q ? { q } : {} }),
   // Sin fechas, todo lo registrado; con { desde, hasta } ("2026-10-01"), solo ese período.
   estadisticas: (periodo = {}) => axiosClient.get('/admin/estadisticas', { params: periodo }),
+  // Las mismas estadísticas en un libro de Excel (llega como Blob): resumen, día por día, cada lugar por día, tesis y horas.
+  estadisticasExcel: (periodo = {}) => axiosClient.get('/admin/estadisticas/excel', { params: periodo, responseType: 'blob' }),
 
   // Catálogo y documentos digitales: las listas vienen por páginas ({ items, total, pagina, porPagina, paginas }).
   tesis: (params) => axiosClient.get('/admin/tesis', { params }),

@@ -8,6 +8,7 @@ import {
   DoorOpen,
   Download,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   Loader2,
   Mail,
@@ -99,6 +100,7 @@ export default function EstadisticasPage() {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [descargando, setDescargando] = useState(false);
   const ultimaConsulta = useRef(0);
 
   const periodo = eleccion.modo === 'rango' ? eleccion.rango : rangoDe(eleccion.modo, eleccion.referencia);
@@ -124,6 +126,26 @@ export default function EstadisticasPage() {
     cargar();
   }, [cargar]);
 
+  // El Excel del mismo período que se ve en pantalla. Se pide con la sesión y se guarda con el nombre que da el servidor.
+  async function descargarExcel() {
+    setDescargando(true);
+    try {
+      const res = await adminApi.estadisticasExcel({ ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}) });
+      const nombre = /filename="([^"]+)"/.exec(res.headers['content-disposition'] ?? '')?.[1] ?? 'Estadisticas.xlsx';
+      const url = URL.createObjectURL(res.data);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = nombre;
+      enlace.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setError('');
+    } catch {
+      setError('No se pudo generar el Excel. Inténtalo de nuevo.');
+    } finally {
+      setDescargando(false);
+    }
+  }
+
   if (!datos) {
     return cargando ? (
       <div className="flex items-center gap-2 text-slate-400">
@@ -143,9 +165,14 @@ export default function EstadisticasPage() {
     <PaginaAdmin
       descripcion={`Cómo se usan los servicios de la biblioteca en el período que elijas. Las reservas cuentan por el día en que se usa el lugar; lo demás, por el día en que ocurrió. Datos calculados el ${fechaLegible(datos.generadoEn)}.`}
       acciones={
-        <Button variant="secondary" icon={RefreshCw} onClick={cargar} disabled={cargando}>
-          {cargando ? 'Actualizando...' : 'Actualizar'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" icon={FileSpreadsheet} onClick={descargarExcel} disabled={descargando}>
+            {descargando ? 'Generando...' : 'Descargar Excel'}
+          </Button>
+          <Button variant="secondary" icon={RefreshCw} onClick={cargar} disabled={cargando}>
+            {cargando ? 'Actualizando...' : 'Actualizar'}
+          </Button>
+        </div>
       }
     >
       <PeriodoDeEstadisticas valor={eleccion} hoy={hoy} onCambiar={setEleccion} />

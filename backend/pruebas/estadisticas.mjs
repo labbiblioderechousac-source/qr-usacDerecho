@@ -2,7 +2,10 @@
 // día en que se usa el lugar; las solicitudes y los eventos, por el día en que ocurrieron (hora de la biblioteca).
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { arrancarServidor, carpetaTemporal, cliente, comprobador } from './servidor.mjs';
+
+const { leerZip } = createRequire(import.meta.url)('../utils/zip.js');
 
 const { ok, terminar } = comprobador();
 
@@ -90,6 +93,43 @@ try {
   ok(mala.estado === 400 && /no es válida/.test(mala.error ?? ''), `una fecha imposible -> 400 (${mala.estado} ${mala.error})`);
   const alReves = await pedir('?desde=2026-09-30&hasta=2026-09-01');
   ok(alReves.estado === 400, `la fecha final antes que la inicial -> 400 (${alReves.estado})`);
+
+  console.log('Excel de septiembre');
+  const r = await fetch(`${servidor.base}/api/admin/estadisticas/excel?desde=2026-09-01&hasta=2026-09-30`, { headers: { Authorization: `Bearer ${token}` } });
+  const libro = Buffer.from(await r.arrayBuffer());
+  ok(r.status === 200 && r.headers.get('content-type') === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', `se descarga un .xlsx (${r.status})`);
+  ok(/filename="Estadisticas_2026-09-01_a_2026-09-30\.xlsx"/.test(r.headers.get('content-disposition') ?? ''), 'con el período en el nombre');
+  const archivos = Object.fromEntries(leerZip(libro).map((a) => [a.nombre, a.contenido.toString('utf8')]));
+  const hojas = [...archivos['xl/workbook.xml'].matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]);
+  ok(hojas.join() === 'Resumen,Por día,Cubículos,Estaciones,Sala de lectura,Tesis,Horas', `trae sus hojas (${hojas.join(', ')})`);
+  // Las celdas de una fila de una hoja, en orden: texto o número.
+  const fila = (hoja, empiezaCon) => {
+    const filas = [...archivos[`xl/worksheets/sheet${hoja}.xml`].matchAll(/<row r="\d+"[^>]*>(.*?)<\/row>/g)].map((m) =>
+      [...m[1].matchAll(/<c r="[A-Z]+\d+"[^>]*?(?:\/>|>(.*?)<\/c>)/g)].map((c) => {
+        const contenido = c[1] ?? '';
+        const texto = /<t[^>]*>(.*?)<\/t>/.exec(contenido);
+        const numero = /<v>(.*?)<\/v>/.exec(contenido);
+        return texto ? texto[1] : numero ? Number(numero[1]) : null;
+      })
+    );
+    return filas.find((f) => f[0] === empiezaCon) ?? null;
+  };
+  const porDia = archivos['xl/worksheets/sheet2.xml'];
+  ok((porDia.match(/<t xml:space="preserve">\d\d\/09\/2026<\/t>/g) ?? []).length === 30, 'la hoja «Por día» tiene los 30 días de septiembre');
+  const el7 = fila(2, '07/09/2026');
+  ok(el7?.[1] === 'Lunes' && el7?.[2] === 2 && el7?.[7] === 1, `el 7 (lunes): 2 búsquedas y 1 estación usada (${JSON.stringify(el7)})`);
+  const el8 = fila(2, '08/09/2026');
+  ok(el8?.[10] === 1 && el8?.[13] === 1 && el8?.[7] === 0, `el 8: 1 no llegó, 1 sesión de kiosco, y la que no llegó no cuenta como uso (${JSON.stringify(el8)})`);
+  const total = fila(2, 'Total');
+  ok(total?.[2] === 3 && /<f>SUM\(C5:C34\)<\/f>/.test(porDia), `la fila Total suma con fórmulas (${JSON.stringify(total?.slice(0, 4))})`);
+  ok(fila(2, '12/09/2026') && /<row r="16"[^>]*><c r="A16" s="4"/.test(porDia), 'los fines de semana van sombreados');
+  const cubiculos = fila(3, '14/09/2026');
+  ok(cubiculos?.[3] === 1 && cubiculos?.[8] === 1, `el 14, el Cubículo 2 se usó 1 vez (${JSON.stringify(cubiculos)})`);
+  ok(fila(3, '08/09/2026')?.[2] === 0, 'la reserva cancelada del Cubículo 1 no cuenta');
+  ok(fila(6, 'T-2021-00045')?.[6] === 1, 'la hoja «Tesis» trae el escaneo de QR');
+  ok(!/2019R-00|Alguien/.test(Object.values(archivos).join('')), 'no lleva nombres ni carnés');
+  const malo = await fetch(`${servidor.base}/api/admin/estadisticas/excel?desde=2026-13-01`, { headers: { Authorization: `Bearer ${token}` } });
+  ok(malo.status === 400, `con una fecha imposible -> 400 (${malo.status})`);
 } finally {
   await servidor.parar();
   fs.rmSync(datos, { recursive: true, force: true });

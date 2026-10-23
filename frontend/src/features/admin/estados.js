@@ -69,6 +69,7 @@ export const ACCIONES_DE_ACTIVIDAD = {
   'cuenta.clave': 'Cambió su propia clave',
   'configuracion.cambiada': 'Cambió la configuración',
   'correo.prueba': 'Envió un correo de prueba',
+  'estadisticas.excel': 'Descargó las estadísticas en Excel',
   'respaldo.descargado': 'Descargó un respaldo de los datos',
   'respaldo.enviado': 'Se envió un respaldo por correo',
   'respaldo.fallido': 'No se pudo enviar el respaldo por correo',
@@ -107,6 +108,7 @@ export const CATEGORIAS_DE_ACTIVIDAD = {
   configuracion: 'Configuración',
   correo: 'Correo',
   respaldo: 'Respaldos',
+  estadisticas: 'Estadísticas',
 };
 
 // Fecha y hora legibles para una marca de tiempo ISO, en hora de la biblioteca.

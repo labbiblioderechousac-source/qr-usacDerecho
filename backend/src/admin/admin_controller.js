@@ -19,7 +19,9 @@ const reservasData = require('../reservas/reservas_data');
 const solvenciaData = require('../solvencia/solvencia_data');
 const { registrar } = require('../actividad/actividad_data');
 const revisionDeEnlaces = require('../catalog/revision_de_enlaces');
-const { calcular } = require('./estadisticas');
+const { calcular, hojasDelExcel, nombreDelExcel } = require('./estadisticas');
+const { crearExcel } = require('../../utils/excel');
+const biblioteca = require('../../utils/biblioteca');
 const { ok, fail, notFound } = require('../../utils/httpResponse');
 
 const TEXTO_DE_ACCESO = { acceso_descarga: 'acceso y descarga', consulta: 'consulta digital', sin_acceso: 'sin acceso digital' };
@@ -241,6 +243,23 @@ function getEstadisticas(req, res) {
   }
 }
 
+// Las estadísticas del mismo período en un libro de Excel: resumen, día por día, cada lugar por día, tesis y horas.
+function getEstadisticasExcel(req, res) {
+  try {
+    const filtro = { desde: req.query.desde, hasta: req.query.hasta };
+    const libro = crearExcel(hojasDelExcel(filtro), { autor: biblioteca.nombre });
+    registrar(req.sesion, 'estadisticas.excel', nombreDelExcel(filtro));
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${nombreDelExcel(filtro)}"`,
+      'Cache-Control': 'private, no-store',
+    });
+    return res.send(libro);
+  } catch (err) {
+    return fail(res, err.message, err.estado || 500);
+  }
+}
+
 module.exports = {
   getResumen,
   getUsuarios,
@@ -255,4 +274,5 @@ module.exports = {
   getRevisionDeEnlaces,
   postRevisionDeEnlaces,
   getEstadisticas,
+  getEstadisticasExcel,
 };

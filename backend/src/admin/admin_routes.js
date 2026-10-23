@@ -13,6 +13,7 @@ const {
   getRevisionDeEnlaces,
   postRevisionDeEnlaces,
   getEstadisticas,
+  getEstadisticasExcel,
 } = require('./admin_controller');
 const { getHorarios, putHorarios, postCierre, deleteCierre } = require('./horarios_controller');
 const { getPersonal, postPersonal, patchPersonal, postClavePersonal } = require('./personal_controller');
@@ -45,6 +46,7 @@ router.post('/qr/revision', ...tesis, postRevisionDeEnlaces);
 router.patch('/qr/:id', ...tesis, patchQr);
 router.post('/qr/:id/verificar', ...tesis, postVerificarQr);
 router.get('/estadisticas', ...estadisticas, getEstadisticas);
+router.get('/estadisticas/excel', ...estadisticas, getEstadisticasExcel);
 
 // Administración: cuentas del personal, configuración general y registro de actividad.
 router.get('/personal', ...soloAdministrador, getPersonal);

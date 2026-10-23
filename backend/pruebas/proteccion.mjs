@@ -48,6 +48,7 @@ const RUTAS = [
   ['GET', '/admin/qr/revision', TESIS],
   ['POST', '/admin/qr/revision', TESIS, {}],
   ['GET', '/admin/estadisticas', ['admin', 'consulta']],
+  ['GET', '/admin/estadisticas/excel', ['admin', 'consulta']],
   ['GET', '/admin/personal', SOLO_ADMIN],
   ['POST', '/admin/personal', SOLO_ADMIN, {}],
   ['PATCH', '/admin/personal/nadie', SOLO_ADMIN, {}],

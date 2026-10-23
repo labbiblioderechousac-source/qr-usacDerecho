@@ -476,6 +476,15 @@ los totales, la demanda por hora y por día y las tesis más consultadas del per
 cuántas se atendieron, cuántas personas no se presentaron, cuántas se cancelaron o liberó el personal, las horas reservadas y qué
 porcentaje de quienes reservaron llegó. La API es `GET /api/admin/estadisticas?desde=2026-10-01&hasta=2026-10-31` (sin fechas, todo).
 
+**Descargar Excel.** El botón **Descargar Excel** de Estadísticas arma un libro (.xlsx) del mismo período que se ve en pantalla, con estas
+hojas: **Resumen**; **Por día** (una fila por cada día del período —del 1 al 30 o 31 si es un mes— con búsquedas en el catálogo, consultas
+y descargas de tesis, escaneos de QR, usos de cubículos, estaciones y sala de lectura, horas reservadas, personas que no llegaron,
+solicitudes de solvencia y aprobadas, sesiones de kiosco y comprobantes impresos, con la fila Total); **Cubículos**, **Estaciones** y **Sala de
+lectura** (cuántas veces se usó cada lugar cada día: Cubículo 1 a 6, Estación 1 a 30, Mesa 1 a 5); **Tesis** (consultas, descargas y
+escaneos de QR de cada tesis) y **Horas** (demanda por hora y por día de la semana). Los fines de semana van sombreados y la primera fila
+y columna quedan fijas. No lleva nombres ni carnés. Un «uso» de un lugar es una reserva que no se canceló ni se liberó. El sistema no
+registra préstamos de libros: del acervo, cuenta las consultas, descargas y escaneos de las tesis.
+
 ### Protección de rutas
 
 - **En el navegador**, una guardia corre antes de mostrar cualquier página de `/privateAccess/...`: sin sesión manda al inicio de sesión (y al
