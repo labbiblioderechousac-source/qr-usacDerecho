@@ -244,8 +244,29 @@ Se hace una sola vez, con la cuenta de Gmail que enviará los correos (mejor una
 El servidor guarda en memoria el token de acceso (dura una hora) y pide otro solo antes de que venza: no hay que hacer nada más. El
 refresh token sigue sirviendo indefinidamente salvo que: la app vuelva a **Prueba**; se quite el acceso en
 [myaccount.google.com/permissions](https://myaccount.google.com/permissions); se cambie la contraseña de la cuenta; o pasen 6 meses
-sin usarlo. En esos casos el panel lo dice («Google ya no acepta GMAIL_REFRESH_TOKEN») y basta repetir el paso 6. `CORREO_REMITENTE`
-debe ser esa misma cuenta (o un alias suyo configurado en Gmail); el nombre entre comillas es el que verá quien reciba el correo.
+sin usarlo. En esos casos el panel lo dice («Google ya no acepta GMAIL_REFRESH_TOKEN») y se vuelve a conectar desde el panel (abajo) o
+repitiendo el paso 6. `CORREO_REMITENTE` debe ser esa misma cuenta (o un alias suyo configurado en Gmail); el nombre entre comillas es el
+que verá quien reciba el correo.
+
+#### Conectar Gmail desde el panel (sin tocar las variables)
+
+En **Correo**, la tarjeta **Cuenta de Gmail** tiene el botón **Conectar Gmail**: lleva a Google, se elige la cuenta de la biblioteca, se da
+el permiso de enviar correos y Google regresa al panel con todo listo. Lo puede hacer cualquier administrador, sin saber de variables; si
+Google anula el permiso, la tarjeta se pone en rojo («Gmail se desconectó») y se arregla con el mismo botón. El permiso queda guardado en
+los datos del servidor, **cifrado** con una llave que sale de `GMAIL_CLIENT_SECRET` (quien viera solo la base de datos no podría usarlo), y
+vale más que `GMAIL_REFRESH_TOKEN`; con él, `CORREO_API` puede quedar vacía. **Quitar la conexión** vuelve al permiso de las variables.
+
+Para que funcione hace falta, **una sola vez**, un cliente OAuth de tipo **Aplicación web** (el de tipo «App de escritorio» del paso 5
+solo sirve para `npm run token-gmail`):
+
+1. En Google Cloud, **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**, tipo **Aplicación web**.
+2. En **URI de redireccionamiento autorizados** agrega la dirección que muestra el panel (Correo → «Si Google muestra Error 400:
+   redirect_uri_mismatch», con botón Copiar). En Render es `https://TU-SITIO.onrender.com/api/admin/correo/gmail/volver`.
+3. Pon el ID y el secreto de ese cliente en `GMAIL_CLIENT_ID` y `GMAIL_CLIENT_SECRET` (en Render, **Environment**) y pulsa **Conectar
+   Gmail** en el panel. El `GMAIL_REFRESH_TOKEN` del cliente anterior deja de servir con el cliente nuevo: se puede borrar.
+
+Detrás de un proxy, el servidor necesita `TRUST_PROXY` para armar la dirección con `https` (Render ya lo trae en `render.yaml`); si aun así
+saliera mal, `GMAIL_URL_DE_REGRESO` la fija a mano.
 
 ### Cargar el catálogo
 
@@ -402,6 +423,12 @@ biblioteca, luego los 6 pasos que la biblioteca publica en su sitio (orden de pa
 banco, verificar el número y el detalle, formulario con fotos, confirmación por correo y solvencia en PDF), los horarios de entrega y los
 dos videos de la biblioteca (*Solvencias Final 2022* y *Tutorial Solicitud de Solvencias*). El formulario la enlaza para quien lo hace por
 primera vez. En el kiosco, además, muestra un código QR que abre el formulario en el celular, donde sí se pueden tomar las fotos.
+
+**Cambiar los videos y los pasos.** En **Solvencias**, debajo de los interruptores, **Cambiar videos y pasos** (solo administración):
+se pega el enlace de YouTube de cada video tal como lo da el botón Compartir (hasta 4; el primero sale arriba y los demás al final, con
+miniatura para confirmar que es el correcto), y se edita, agrega, quita o reordena cada paso (hasta 12), marcando en cuál va el botón
+«Ir al formulario». Se ve al instante en el sitio y en los kioscos, queda en la actividad del personal, y **Volver a los originales**
+regresa a los de la biblioteca.
 
 **Habilitar o deshabilitar el trámite.** Arriba de la sección **Solvencias** del panel (y también en **Configuración → Solicitud de
 solvencia**) hay un interruptor para la web y otro para los kioscos. Donde se

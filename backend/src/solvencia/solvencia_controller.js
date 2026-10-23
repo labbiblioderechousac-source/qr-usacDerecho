@@ -10,6 +10,7 @@ const {
   resumen,
 } = require('./solvencia_data');
 const fotosData = require('./fotos_data');
+const guia = require('./guia_data');
 const { constanciaDeSolvencia, nombreDeLaConstancia } = require('./constancia_pdf');
 const notificaciones = require('../notificaciones/notificaciones');
 const configuracion = require('../configuracion/configuracion_data');
@@ -124,4 +125,25 @@ function getResumen(req, res) {
   return ok(res, resumen());
 }
 
-module.exports = { getMotivos, getReglas, postSolicitud, getSolicitudes, getFoto, getConstancia, patchAprobar, patchRechazar, getResumen };
+// La guía «Cómo hacer tu solvencia» (videos y pasos): la lee cualquiera; solo el administrador la cambia.
+function getGuia(req, res) {
+  return ok(res, guia.obtener());
+}
+
+function putGuia(req, res) {
+  try {
+    const nueva = guia.actualizar(req.body, req.sesion);
+    registrar(req.sesion, 'solvencia.guia', `${nueva.videos.length} videos y ${nueva.pasos.length} pasos`);
+    return ok(res, nueva, 'Guía guardada');
+  } catch (err) {
+    return fail(res, err.message, err.estado || 500);
+  }
+}
+
+function postRestaurarGuia(req, res) {
+  const original = guia.restaurar(req.sesion);
+  registrar(req.sesion, 'solvencia.guia', 'volvió a los videos y pasos originales');
+  return ok(res, original, 'Se volvió a la guía original');
+}
+
+module.exports = { getMotivos, getReglas, postSolicitud, getSolicitudes, getFoto, getConstancia, patchAprobar, patchRechazar, getResumen, getGuia, putGuia, postRestaurarGuia };

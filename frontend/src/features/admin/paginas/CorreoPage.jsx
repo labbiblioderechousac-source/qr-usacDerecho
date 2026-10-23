@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Loader2, PlugZap, RefreshCw, Send } from 'lucide-react';
 import { adminApi } from '../adminApi';
+import ConexionDeGmail from '../componentes/ConexionDeGmail';
 import PaginaAdmin from '../componentes/PaginaAdmin';
 import { ESTADO_DE_CORREO, TIPO_DE_CORREO, fechaLegible } from '../estados';
 import { getErrorMessage } from '../../../shared/api/axiosClient';
@@ -29,9 +31,12 @@ function Variable({ children }) {
   return <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-slate-800">{children}</code>;
 }
 
-// Correo electrónico (solo el administrador): cómo quedó configurado el envío de comprobantes, una prueba de envío y los últimos
-// correos con su resultado. El correo se configura con variables del servidor (ver backend/.env.example); aquí no se escribe nada.
+// Correo electrónico (solo el administrador): cómo quedó configurado el envío de comprobantes, la cuenta de Gmail (que se conecta desde
+// aquí), una prueba de envío y los últimos correos con su resultado. Lo demás se configura con variables del servidor (backend/.env.example).
 export default function CorreoPage() {
+  // Al volver de Google la dirección trae ?gmail=conectado o ?gmail=error: se muestra una vez y se limpia, para que recargar no lo repita.
+  const [parametros, setParametros] = useSearchParams();
+  const [vueltaDeGoogle] = useState(() => parametros.get('gmail'));
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -56,6 +61,10 @@ export default function CorreoPage() {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  useEffect(() => {
+    if (parametros.has('gmail')) setParametros({}, { replace: true });
+  }, [parametros, setParametros]);
 
   async function verificar() {
     setVerificando(true);
@@ -99,10 +108,13 @@ export default function CorreoPage() {
   }
 
   const modo = MODOS[datos.modo];
+  const conGmail = datos.gmail && (datos.gmail.puedeConectar || datos.gmail.enUso || datos.gmail.conexion);
+  // El aviso de «Gmail no está conectado» ya lo dice la tarjeta de Gmail, con su botón.
+  const avisos = conGmail ? datos.avisos.filter((aviso) => !aviso.startsWith('Gmail no está conectado')) : datos.avisos;
 
   return (
     <PaginaAdmin
-      descripcion="Así sale el correo de la biblioteca: los comprobantes de reservas y de solicitudes de solvencia que la gente pide o recibe. Se configura con las variables del servidor; aquí ves cómo quedó y compruebas que funciona."
+      descripcion="Así sale el correo de la biblioteca: los comprobantes de reservas y de solicitudes de solvencia que la gente pide o recibe. Aquí conectas la cuenta de Gmail, ves cómo quedó y compruebas que funciona."
       acciones={
         <Button variant="secondary" icon={RefreshCw} onClick={cargar}>
           Actualizar
@@ -111,18 +123,20 @@ export default function CorreoPage() {
     >
       <AlertBanner>{error}</AlertBanner>
 
-      {datos.avisos.length > 0 ? (
-        datos.avisos.map((aviso) => (
+      {avisos.length > 0 ? (
+        avisos.map((aviso) => (
           <Nota key={aviso} tono="aviso">
             {aviso}
           </Nota>
         ))
-      ) : datos.modo === 'simulado' ? (
+      ) : datos.modo === 'simulado' && !conGmail ? (
         <Nota tono="info" titulo="El correo está en modo simulado">
           Los correos se arman completos pero no salen: sirve para pruebas y demostraciones. Para que los comprobantes lleguen de verdad
           hay que configurar un servicio de correo (abajo, «Cómo configurarlo»).
         </Nota>
       ) : null}
+
+      {conGmail ? <ConexionDeGmail gmail={datos.gmail} vuelta={vueltaDeGoogle} onCambio={cargar} /> : null}
 
       <section className="flex flex-col gap-4 rounded-xl border border-border bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -157,7 +171,7 @@ export default function CorreoPage() {
               <span className="text-xs text-slate-500">
                 {datos.modo === 'smtp'
                   ? 'Abre la conexión y revisa el usuario y la clave sin mandar ningún correo.'
-                  : 'Pide a Google un token de acceso con el refresh token, sin mandar ningún correo.'}
+                  : 'Pregunta a Google si el permiso de la cuenta sigue sirviendo, sin mandar ningún correo.'}
               </span>
             </div>
             {verificacion ? (
@@ -264,10 +278,11 @@ export default function CorreoPage() {
           <div>
             <p className="font-semibold text-slate-900">A. API de Gmail (gratis, funciona en la nube)</p>
             <p>
-              <Variable>CORREO_API</Variable> con <Variable>gmail</Variable>, <Variable>GMAIL_CLIENT_ID</Variable>, <Variable>GMAIL_CLIENT_SECRET</Variable>,{' '}
-              <Variable>GMAIL_REFRESH_TOKEN</Variable> y <Variable>CORREO_REMITENTE</Variable> con la misma cuenta de Gmail. El token se genera en un equipo
-              con <Variable>npm run token-gmail</Variable> (dentro de <Variable>backend</Variable>), que además deja todo escrito en <Variable>backend/.env</Variable>.
-              Para que el token no venza, la app de Google debe estar «En producción», no en «Prueba» (pasos en el README, «Correo con Gmail»).
+              <Variable>GMAIL_CLIENT_ID</Variable> y <Variable>GMAIL_CLIENT_SECRET</Variable> (del cliente OAuth de tipo Aplicación web) y, opcional,{' '}
+              <Variable>CORREO_REMITENTE</Variable> con la misma cuenta de Gmail. Con eso, la cuenta se conecta aquí arriba con <b>Conectar Gmail</b>, y se
+              vuelve a conectar igual si algún día Google la anula. También sirve el camino de antes: <Variable>CORREO_API</Variable> con{' '}
+              <Variable>gmail</Variable> y <Variable>GMAIL_REFRESH_TOKEN</Variable> generado con <Variable>npm run token-gmail</Variable>; si hay las dos, vale la
+              del panel. Para que el permiso no venza, la app de Google debe estar «En producción», no en «Prueba» (pasos en el README, «Correo con Gmail»).
             </p>
           </div>
           <div>

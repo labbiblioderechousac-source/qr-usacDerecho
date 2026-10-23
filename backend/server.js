@@ -44,7 +44,7 @@ const POLITICA_DE_CONTENIDO = [
   "script-src 'self'", // ni scripts en línea ni de otros sitios
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // React pone estilos en línea (tamaños, posiciones); las tipografías son de Google Fonts
   "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://i.ytimg.com", // las miniaturas de YouTube en el editor de «Cómo hacer tu solvencia»
   "connect-src 'self'", // el sitio solo habla con este servidor
   "frame-src 'self' https: http:", // el visor muestra el documento de la tesis, que puede estar en cualquier sitio
   "object-src 'none'",

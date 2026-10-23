@@ -161,8 +161,9 @@ async function arranqueYEsquema(bd) {
     await pausa(1200);
     const docs = (await consultar(bd.url, 'select nombre from biblioteca.almacen order by nombre')).map((f) => f.nombre);
     ok(
-      JSON.stringify(docs) === JSON.stringify(['actividad', 'catalogo', 'configuracion', 'cuentas', 'eventos', 'horarios', 'reservas', 'respaldos', 'sesiones', 'solvencia']),
-      `se guardan los 10 documentos al arrancar (${docs.join(', ')})`
+      JSON.stringify(docs) ===
+        JSON.stringify(['actividad', 'catalogo', 'conexion_gmail', 'configuracion', 'cuentas', 'eventos', 'guia_de_solvencia', 'horarios', 'reservas', 'respaldos', 'sesiones', 'solvencia']),
+      `se guardan los 12 documentos al arrancar (${docs.join(', ')})`
     );
     const vistas = (await consultar(bd.url, "select table_name from information_schema.views where table_schema='biblioteca' order by 1")).map((f) => f.table_name);
     ok(vistas.length === 7 && vistas.includes('v_reservas') && vistas.includes('v_tesis'), `se crean las siete vistas (${vistas.join(', ')})`);

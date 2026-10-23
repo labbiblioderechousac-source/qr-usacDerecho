@@ -1,5 +1,18 @@
 const express = require('express');
-const { getMotivos, getReglas, postSolicitud, getSolicitudes, getFoto, getConstancia, patchAprobar, patchRechazar, getResumen } = require('./solvencia_controller');
+const {
+  getMotivos,
+  getReglas,
+  postSolicitud,
+  getSolicitudes,
+  getFoto,
+  getConstancia,
+  patchAprobar,
+  patchRechazar,
+  getResumen,
+  getGuia,
+  putGuia,
+  postRestaurarGuia,
+} = require('./solvencia_controller');
 const { autenticar, requiereRol } = require('../auth/auth_middleware');
 
 const router = express.Router();
@@ -12,10 +25,13 @@ const soloAdministrador = [autenticar, requiereRol('administrador')];
 // Públicas: cualquier persona puede pedir su solvencia.
 router.get('/motivos', getMotivos);
 router.get('/reglas', getReglas);
+router.get('/guia', getGuia);
 router.post('/', postSolicitud);
 
 // Solo personal autorizado.
 router.get('/resumen', ...personal, getResumen);
+router.put('/guia', ...soloAdministrador, putGuia);
+router.post('/guia/restaurar', ...soloAdministrador, postRestaurarGuia);
 router.get('/', ...personal, getSolicitudes);
 router.get('/:id/fotos/:tipo', ...soloAdministrador, getFoto);
 router.get('/:id/constancia', ...soloAdministrador, getConstancia);

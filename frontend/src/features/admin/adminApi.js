@@ -37,6 +37,9 @@ export const adminApi = {
   correo: () => axiosClient.get('/admin/correo'),
   verificarCorreo: () => axiosClient.post('/admin/correo/verificar'),
   probarCorreo: (para) => axiosClient.post('/admin/correo/prueba', { para }),
+  // Devuelve la dirección de Google donde se da el permiso; Google trae de vuelta a la sección Correo.
+  conectarGmail: () => axiosClient.post('/admin/correo/gmail/conectar'),
+  desconectarGmail: () => axiosClient.post('/admin/correo/gmail/desconectar'),
   horarios: () => axiosClient.get('/admin/horarios'),
   guardarHorarios: (datos) => axiosClient.put('/admin/horarios', datos),
   agregarCierre: (datos) => axiosClient.post('/admin/horarios/cierres', datos),

@@ -83,6 +83,10 @@ const RUTAS = [
   ['GET', '/solvencia/SOL-999/constancia', SOLO_ADMIN],
   ['PATCH', '/solvencia/SOL-999/aprobar', SOLO_ADMIN, {}],
   ['PATCH', '/solvencia/SOL-999/rechazar', SOLO_ADMIN, {}],
+  ['PUT', '/solvencia/guia', SOLO_ADMIN, {}],
+  ['POST', '/solvencia/guia/restaurar', SOLO_ADMIN, {}],
+  ['POST', '/admin/correo/gmail/conectar', SOLO_ADMIN, {}],
+  ['POST', '/admin/correo/gmail/desconectar', SOLO_ADMIN, {}],
   ['GET', '/auth/me', TODOS],
   ['POST', '/auth/cambiar-clave', TODOS, {}],
 ];
@@ -111,10 +115,14 @@ for (const [metodo, ruta] of [
   ['GET', '/reservas/cubiculo/disponibilidad?fecha=2026-10-12'],
   ['GET', '/solvencia/reglas'],
   ['GET', '/solvencia/motivos'],
+  ['GET', '/solvencia/guia'],
 ]) {
   const r = await llamar(metodo, ruta);
   ok(r.estado === 200, `${metodo} ${ruta} es pública y debe dar 200; dio ${r.estado}`);
 }
+// La vuelta desde Google es pública (esa visita no lleva la sesión), pero sin un pedido vigente no hace nada: regresa al panel con error.
+const vuelta = await fetch(`${BASE}/api/admin/correo/gmail/volver?state=inventado&code=x`, { redirect: 'manual' });
+ok(vuelta.status === 303 && /\/correo\?gmail=error$/.test(vuelta.headers.get('location') ?? ''), `la vuelta de Google sin pedido regresa con error (${vuelta.status} ${vuelta.headers.get('location')})`);
 const lista = await (await fetch(`${BASE}/api/reservas/cubiculo/disponibilidad?fecha=2026-10-12`)).text();
 ok(!/identificacion|solicitante|correo|codigoConfirmacion/.test(lista), 'la disponibilidad pública no trae datos de las personas');
 

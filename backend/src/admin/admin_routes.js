@@ -19,7 +19,7 @@ const { getHorarios, putHorarios, postCierre, deleteCierre } = require('./horari
 const { getPersonal, postPersonal, patchPersonal, postClavePersonal } = require('./personal_controller');
 const { getConfiguracion, patchConfiguracion } = require('./configuracion_controller');
 const { getActividad } = require('./actividad_controller');
-const { getCorreo, postVerificar, postPrueba } = require('./correo_controller');
+const { getCorreo, postVerificar, postPrueba, postConectarGmail, getVolverDeGmail, postDesconectarGmail } = require('./correo_controller');
 const { getAlmacenamiento, getRespaldo, postEnviarRespaldo } = require('./almacenamiento_controller');
 const { autenticar, requiereRol } = require('../auth/auth_middleware');
 
@@ -62,6 +62,11 @@ router.post('/respaldo/enviar', ...soloAdministrador, postEnviarRespaldo);
 router.get('/correo', ...soloAdministrador, getCorreo);
 router.post('/correo/verificar', ...soloAdministrador, postVerificar);
 router.post('/correo/prueba', ...soloAdministrador, postPrueba);
+router.post('/correo/gmail/conectar', ...soloAdministrador, postConectarGmail);
+router.post('/correo/gmail/desconectar', ...soloAdministrador, postDesconectarGmail);
+// Pública a propósito: es donde Google devuelve a la persona, y esa visita no lleva la sesión del panel. Solo sirve con el `state` de
+// un pedido que hizo un administrador (de un solo uso y por 15 minutos).
+router.get('/correo/gmail/volver', getVolverDeGmail);
 router.get('/horarios', ...soloAdministrador, getHorarios);
 router.put('/horarios', ...soloAdministrador, putHorarios);
 router.post('/horarios/cierres', ...soloAdministrador, postCierre);

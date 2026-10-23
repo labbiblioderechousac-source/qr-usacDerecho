@@ -26,6 +26,7 @@ const require = createRequire(import.meta.url);
 const PRUEBAS = [
   { nombre: 'propuesta', servidor: true, fases: ['escribir', 'verificar'] },
   { nombre: 'solvencia-fotos' },
+  { nombre: 'guia-solvencia', servidor: true, fases: ['escribir', 'verificar'] },
   { nombre: 'sanciones' },
   { nombre: 'horas', servidor: true },
   { nombre: 'fin-de-semana' },
@@ -47,6 +48,7 @@ const PRUEBAS = [
   { nombre: 'keepalive' },
   { nombre: 'aviso-correo' },
   { nombre: 'correo', modulos: ['smtp-server', 'mailparser'] },
+  { nombre: 'gmail-panel' },
   { nombre: 'postgres', base: true },
 ];
 

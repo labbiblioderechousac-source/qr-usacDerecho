@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Globe, MonitorSmartphone } from 'lucide-react';
 import { adminApi } from '../adminApi';
 import { getErrorMessage } from '../../../shared/api/axiosClient';
+import GuiaDeSolvencia from './GuiaDeSolvencia';
 
 const CANALES = [
   { canal: 'web', nombre: 'En la web', icono: Globe, apagada: 'El formulario no aparece en el sitio' },
@@ -73,6 +74,7 @@ export default function InterruptorDeSolvencia() {
         })}
       </div>
       {error ? <p className="text-xs font-medium text-secondary">{error}</p> : null}
+      <GuiaDeSolvencia />
     </section>
   );
 }

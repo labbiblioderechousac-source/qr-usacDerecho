@@ -4,13 +4,16 @@
 //   1. API HTTPS de un servicio de correo. No usa puertos SMTP: sirve en las plataformas que los bloquean (Railway en sus planes
 //      Free, Trial y Hobby; Render en los servicios gratuitos). Puede ser:
 //        - CORREO_API=gmail: la API de Gmail con una cuenta de Google propia (gratis). Usa GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET y
-//          GMAIL_REFRESH_TOKEN; este último lo genera `npm run token-gmail` y no vence (ver README, «Correo con Gmail»).
+//          GMAIL_REFRESH_TOKEN; este último lo genera `npm run token-gmail` y no vence (ver README, «Correo con Gmail»). También se
+//          puede conectar desde el panel (Correo → «Conectar Gmail», ver conexionGmail.js): esa conexión vale más que
+//          GMAIL_REFRESH_TOKEN y, si CORREO_API está vacía, basta para enviar con Gmail.
 //        - CORREO_API=brevo o resend, con CORREO_API_KEY.
 //   2. SMTP (SMTP_HOST y las que lo acompañan), por ejemplo el de Gmail, Microsoft 365 o el de la propia universidad.
 //   3. Simulado: sin nada de lo anterior, los mensajes se arman completos y se guardan en la bandeja, pero no salen. Así todo
 //      funciona igual en pruebas y demostraciones sin mandar correos reales.
 // El camino se decide en cada envío, así que el administrador puede ver en el panel (Correo) cuál está activo y probarlo.
 const biblioteca = require('./biblioteca');
+const conexionGmail = require('./conexionGmail');
 const { htmlDeTexto } = require('./plantillaCorreo');
 
 const MAXIMO_EN_BANDEJA = 200;
@@ -65,6 +68,7 @@ const GMAIL = {
 };
 const MARGEN_DEL_TOKEN_MS = 2 * 60 * 1000;
 let tokenDeGmail = { huella: '', valor: '', venceEn: 0, cuenta: null };
+let gmailAnulado = null; // { fecha, mensaje } si Google dejó de aceptar la conexión: el panel lo muestra en rojo hasta que vuelva a servir
 
 // "Nombre" <correo@dominio> o solo correo@dominio. Devuelve { nombre, correo } o null si no tiene forma de remitente.
 function parsearRemitente(texto) {
@@ -85,26 +89,37 @@ function booleano(valor) {
 // Lee la configuración del correo desde las variables de entorno y señala lo que está mal. `modo` es lo que realmente se usará.
 function leerConfiguracion() {
   const avisos = [];
-  const api = String(process.env.CORREO_API || '').trim().toLowerCase();
   const claveApi = String(process.env.CORREO_API_KEY || '').trim();
   const host = String(process.env.SMTP_HOST || '').trim();
   const puerto = Number(process.env.SMTP_PORT) || 587;
   const usuario = String(process.env.SMTP_USER || '').trim();
   // Al pegar la variable a mano en una plataforma se puede colar la línea siguiente (por una comilla sin cerrar): vale solo la primera.
   const textoRemitente = String(process.env.CORREO_REMITENTE || process.env.SMTP_FROM || '').split(/\r?\n/)[0].trim();
+  const clienteId = String(process.env.GMAIL_CLIENT_ID || '').trim();
+  const clienteSecreto = String(process.env.GMAIL_CLIENT_SECRET || '').trim();
+  const delPanel = conexionGmail.leer({ clienteId, clienteSecreto });
   const gmail = {
-    clienteId: String(process.env.GMAIL_CLIENT_ID || '').trim(),
-    clienteSecreto: String(process.env.GMAIL_CLIENT_SECRET || '').trim(),
-    refreshToken: String(process.env.GMAIL_REFRESH_TOKEN || '').trim(),
+    clienteId,
+    clienteSecreto,
+    refreshToken: delPanel?.refreshToken || String(process.env.GMAIL_REFRESH_TOKEN || '').trim(),
+    desdeElPanel: Boolean(delPanel?.refreshToken),
   };
+  if (delPanel?.problema) avisos.push(delPanel.problema);
+  const api = String(process.env.CORREO_API || '').trim().toLowerCase() || (gmail.desdeElPanel ? 'gmail' : '');
+  if (gmail.desdeElPanel && api !== 'gmail') {
+    avisos.push(`Gmail está conectado desde el panel, pero CORREO_API vale «${api}»: el correo sale por ese servicio. Déjala vacía o en gmail para usar Gmail.`);
+  }
 
   let modo = 'simulado';
   if (api === 'gmail') {
     const faltan = [['GMAIL_CLIENT_ID', gmail.clienteId], ['GMAIL_CLIENT_SECRET', gmail.clienteSecreto], ['GMAIL_REFRESH_TOKEN', gmail.refreshToken]]
       .filter(([, valor]) => !valor)
       .map(([nombre]) => nombre);
-    if (faltan.length > 0) avisos.push(`Para enviar con Gmail falta ${faltan.join(', ')}. Se generan con «npm run token-gmail» (ver README, «Correo con Gmail»).`);
-    else modo = 'api';
+    if (faltan.length === 1 && faltan[0] === 'GMAIL_REFRESH_TOKEN') {
+      avisos.push('Gmail no está conectado: pulsa «Conectar Gmail» en el panel (Correo) o genera GMAIL_REFRESH_TOKEN con «npm run token-gmail».');
+    } else if (faltan.length > 0) {
+      avisos.push(`Para enviar con Gmail falta ${faltan.join(', ')}. Se generan con «npm run token-gmail» (ver README, «Correo con Gmail»).`);
+    } else modo = 'api';
   } else if (api) {
     if (!PROVEEDORES_API[api]) avisos.push(`CORREO_API vale «${api}» y no es un servicio conocido: usa gmail, brevo o resend.`);
     else if (!claveApi) avisos.push('Falta CORREO_API_KEY: sin la clave de la API no se puede enviar.');
@@ -124,7 +139,8 @@ function leerConfiguracion() {
     }
   }
   if (!remitente && modo === 'api' && api === 'gmail') {
-    avisos.push('Sin un CORREO_REMITENTE válido, el correo sale desde la cuenta de Gmail con la que se generó el token y con el nombre de la biblioteca.');
+    // Conectada desde el panel, la cuenta se ve en la tarjeta de Gmail: no hace falta avisarlo.
+    if (!gmail.desdeElPanel) avisos.push('Sin un CORREO_REMITENTE válido, el correo sale desde la cuenta de Gmail con la que se generó el token y con el nombre de la biblioteca.');
   } else if (!remitente && modo === 'api' && !textoRemitente) {
     avisos.push('Falta CORREO_REMITENTE: la API solo envía desde un remitente que hayas verificado en el servicio.');
   }
@@ -246,18 +262,13 @@ function nombreDelServicio(config) {
   return config.api === 'gmail' ? GMAIL.nombre : PROVEEDORES_API[config.api].nombre;
 }
 
-// El correo de la cuenta viene en el id_token (se pidió el permiso «email» al generar el token). Solo se usa para mostrarlo.
-function cuentaDelIdToken(idToken) {
-  try {
-    return JSON.parse(Buffer.from(String(idToken).split('.')[1], 'base64url').toString('utf8')).email || null;
-  } catch {
-    return null;
-  }
-}
+const { cuentaDelIdToken } = conexionGmail;
 
 // Pide a Google un token de acceso nuevo con el refresh token (o devuelve el que ya hay si todavía sirve).
+const huellaDeGmail = (config) => JSON.stringify([config.gmail.clienteId, config.gmail.clienteSecreto, config.gmail.refreshToken]);
+
 async function tokenDeAccesoDeGmail(config, { renovar = false } = {}) {
-  const huella = JSON.stringify([config.gmail.clienteId, config.gmail.clienteSecreto, config.gmail.refreshToken]);
+  const huella = huellaDeGmail(config);
   if (!renovar && tokenDeGmail.huella === huella && Date.now() < tokenDeGmail.venceEn - MARGEN_DEL_TOKEN_MS) return tokenDeGmail.valor;
   let respuesta;
   try {
@@ -282,17 +293,23 @@ async function tokenDeAccesoDeGmail(config, { renovar = false } = {}) {
     // Si Google anuló el refresh token o el cliente, también anuló los tokens de acceso que había dado: no se sigue usando el guardado.
     if (['invalid_grant', 'invalid_client', 'unauthorized_client'].includes(datos.error)) tokenDeGmail = { huella: '', valor: '', venceEn: 0, cuenta: null };
     const detalle = recortar(datos.error_description || datos.error || `error ${respuesta.status}`);
-    if (datos.error === 'invalid_grant') {
-      throw new Error(
-        `Google ya no acepta GMAIL_REFRESH_TOKEN (${detalle}). Genera uno nuevo con «npm run token-gmail». Si pasa cada 7 días, la app ` +
-          'de Google está en modo «Prueba»: en Google Cloud, «Pantalla de consentimiento de OAuth» (Público), pulsa «Publicar app» para que el token no venza.',
-      );
+    let mensaje = `Google no entregó el token de acceso: ${detalle}`;
+    if (datos.error === 'invalid_grant' && config.gmail.desdeElPanel) {
+      mensaje =
+        `Google ya no acepta la conexión de Gmail hecha desde el panel (${detalle}): alguien quitó el acceso o cambió la contraseña de la ` +
+        'cuenta. Vuelve a conectarla con «Conectar Gmail» (Correo).';
+    } else if (datos.error === 'invalid_grant') {
+      mensaje =
+        `Google ya no acepta GMAIL_REFRESH_TOKEN (${detalle}). Conéctalo de nuevo con «Conectar Gmail» en el panel (Correo) o genera uno ` +
+        'nuevo con «npm run token-gmail». Si pasa cada 7 días, la app de Google está en modo «Prueba»: en Google Cloud, «Pantalla de ' +
+        'consentimiento de OAuth» (Público), pulsa «Publicar app» para que el token no venza.';
+    } else if (datos.error === 'invalid_client' || datos.error === 'unauthorized_client') {
+      mensaje = `Google rechazó GMAIL_CLIENT_ID o GMAIL_CLIENT_SECRET (${detalle}). Cópialos otra vez desde Google Cloud, «Credenciales».`;
     }
-    if (datos.error === 'invalid_client' || datos.error === 'unauthorized_client') {
-      throw new Error(`Google rechazó GMAIL_CLIENT_ID o GMAIL_CLIENT_SECRET (${detalle}). Cópialos otra vez desde Google Cloud, «Credenciales».`);
-    }
-    throw new Error(`Google no entregó el token de acceso: ${detalle}`);
+    if (['invalid_grant', 'invalid_client', 'unauthorized_client'].includes(datos.error)) gmailAnulado = { huella, fecha: new Date().toISOString(), mensaje };
+    throw new Error(mensaje);
   }
+  gmailAnulado = null;
   tokenDeGmail = {
     huella,
     valor: datos.access_token,
@@ -445,6 +462,16 @@ function estado() {
     avisos: config.avisos,
     ultimoEnvio,
     ultimoError,
+    // Para el botón «Conectar Gmail»: si se puede (hace falta el cliente de Google en las variables), de dónde sale la conexión en uso
+    // y si Google la anuló (solo si es la misma que sigue configurada: una conexión nueva no hereda el aviso de la anterior).
+    gmail: {
+      puedeConectar: Boolean(config.gmail.clienteId && config.gmail.clienteSecreto),
+      enUso: config.modo === 'api' && config.api === 'gmail',
+      origen: config.gmail.desdeElPanel ? 'panel' : config.gmail.refreshToken ? 'variables' : null,
+      cuenta: config.api === 'gmail' && tokenDeGmail.huella === huellaDeGmail(config) ? tokenDeGmail.cuenta : null,
+      anulada: gmailAnulado && gmailAnulado.huella === huellaDeGmail(config) ? { fecha: gmailAnulado.fecha, mensaje: gmailAnulado.mensaje } : null,
+      ...conexionGmail.resumen(),
+    },
   };
 }
 

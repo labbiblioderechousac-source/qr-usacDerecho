@@ -1,56 +1,40 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QRCodeCanvas } from 'qrcode.react';
 import { ArrowRight, Clock, Smartphone } from 'lucide-react';
+import { solvenciaApi } from './solvenciaApi';
+import { Esqueleto } from '../../shared/components/Cargando';
 import Nota from '../../shared/components/Nota';
 import Page from '../../shared/components/Page';
 import { LIBRARY } from '../../shared/config/library';
 import { useSolvenciaDisponible } from '../../shared/config/useServicios';
 import { useKiosco } from '../../shared/kiosco/KioscoContext';
 
-// Cómo pedir la solvencia, con el proceso que la biblioteca publica en su sitio (sección Solvencias) y sus dos videos. En el kiosco
-// de la entrada, donde no hay cámara para las fotos del pago, además muestra un código QR que abre el formulario en el celular.
+// Cómo pedir la solvencia: los videos y los pasos vienen del servidor, porque el administrador los cambia desde el panel (arrancan con
+// lo que la biblioteca publica en su sitio, sección Solvencias). En el kiosco de la entrada, donde no hay cámara para las fotos del pago,
+// además muestra un código QR que abre el formulario en el celular.
 
-const PASOS = [
-  {
-    titulo: 'Genera la orden de pago',
-    texto: 'Entra a SIIF USAC (siif.usac.edu.gt) con tu usuario y genera la orden de pago de la solvencia de biblioteca.',
-  },
-  {
-    titulo: 'Paga la orden en el banco',
-    texto: 'Cancélala en una agencia de Banrural, Bantrab o G&T Continental. Guarda la boleta de depósito: le tomarás una foto.',
-  },
-  {
-    titulo: 'Verifica la orden y la boleta',
-    texto:
-      'El número de orden de pago debe ser el mismo en la orden y en la boleta de depósito, y en el detalle de pago debe aparecer «Biblioteca (De mi Unidad Académica) – Solvencia de Biblioteca».',
-  },
-  {
-    titulo: 'Llena el formulario y sube las fotos',
-    texto:
-      'Escribe tus datos tal como aparecen en tu DPI, el número de la orden y la fecha en que presentarás tu papelería, y sube una foto de la boleta de depósito y otra de la orden de pago.',
-    formulario: true,
-  },
-  {
-    titulo: 'Revisa tu correo',
-    texto:
-      'En unos minutos te llega la confirmación con los datos que enviaste. Si no llega en 5 minutos, revisa que el correo estuviera bien escrito y envía una nueva solicitud.',
-  },
-  {
-    titulo: 'Recibe tu solvencia en PDF',
-    texto: 'La biblioteca revisa el pago y te envía la constancia de solvencia por correo, en el horario de entrega. Imprímela para tus trámites.',
-  },
-];
+function useGuia() {
+  const [guia, setGuia] = useState(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let vigente = true;
+    solvenciaApi
+      .guia()
+      .then((res) => vigente && setGuia(res.data.data))
+      .catch(() => vigente && setError(true));
+    return () => {
+      vigente = false;
+    };
+  }, []);
+  return { guia, error };
+}
 
 const HORARIOS = [
   ['De 08:00 a 13:00', 'ese mismo día a las 15:00'],
   ['De 13:01 a 17:00', 'ese mismo día a las 18:00'],
   ['Después de las 17:00', 'a las 14:00 del siguiente día hábil'],
   ['Antes de las 08:00', 'ese mismo día a las 14:00'],
-];
-
-const VIDEOS = [
-  { id: 'HaVEv74BTS4', titulo: 'Presentación del servicio de solvencias' },
-  { id: 'PMQuj1tNq0s', titulo: 'Tutorial: cómo pedir tu solvencia' },
 ];
 
 // El video se ve dentro de la página. `sandbox` sin ventanas emergentes: desde el kiosco nadie puede salir a YouTube con un clic.
@@ -96,7 +80,9 @@ function CodigoParaElCelular({ direccion }) {
 export default function PasosDeSolvenciaPage() {
   const { kiosco } = useKiosco();
   const { disponible } = useSolvenciaDisponible();
+  const { guia, error } = useGuia();
   const direccionDelFormulario = `${window.location.origin}/solvencia`;
+  const [primerVideo, ...otrosVideos] = guia?.videos ?? [];
 
   return (
     <Page
@@ -116,9 +102,18 @@ export default function PasosDeSolvenciaPage() {
 
         {kiosco ? <CodigoParaElCelular direccion={direccionDelFormulario} /> : null}
 
-        <section aria-label="Video de la biblioteca" className="flex flex-col gap-2">
-          <Video {...VIDEOS[0]} />
-        </section>
+        {error ? (
+          <Nota tono="error" titulo="No se pudieron cargar los pasos">
+            Revisa la conexión y vuelve a abrir esta página. Si sigue igual, consulta en el mostrador de la biblioteca.
+          </Nota>
+        ) : null}
+
+        {!guia && !error ? <Esqueleto className="aspect-video w-full rounded-xl" /> : null}
+        {primerVideo ? (
+          <section aria-label="Video de la biblioteca" className="flex flex-col gap-2">
+            <Video {...primerVideo} />
+          </section>
+        ) : null}
 
         <Nota tono="info" titulo="Antes de empezar">
           El servicio es solo para estudiantes de la {LIBRARY.facultad} del Campus Central. Envía tu solicitud con al menos 24 horas y como máximo 7
@@ -130,21 +125,22 @@ export default function PasosDeSolvenciaPage() {
           <h2 id="pasos-titulo" className="font-display text-2xl font-semibold text-slate-900">
             Los pasos
           </h2>
+          {!guia && !error ? <Esqueleto className="h-64 rounded-2xl" /> : null}
           <ol className="flex flex-col gap-3">
-            {PASOS.map((paso, i) => (
-              <li key={paso.titulo} className="flex gap-4 rounded-2xl border border-border bg-white p-5 shadow-card">
+            {(guia?.pasos ?? []).map((paso, i) => (
+              <li key={`${i}-${paso.titulo}`} className="flex gap-4 rounded-2xl border border-border bg-white p-5 shadow-card">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary font-display text-lg font-bold text-white">
                   {i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-lg font-semibold text-slate-900">{paso.titulo}</h3>
                   <p className="mt-1 text-slate-700">{paso.texto}</p>
-                  {paso.formulario && disponible ? (
+                  {paso.conFormulario && disponible ? (
                     <Link to="/solvencia" className="mt-3 inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">
                       Ir al formulario <ArrowRight size={16} aria-hidden="true" />
                     </Link>
                   ) : null}
-                  {paso.formulario && kiosco ? <p className="mt-2 text-sm text-slate-500">En el kiosco: usa el código de arriba para hacerlo desde tu celular.</p> : null}
+                  {paso.conFormulario && kiosco ? <p className="mt-2 text-sm text-slate-500">En el kiosco: usa el código de arriba para hacerlo desde tu celular.</p> : null}
                 </div>
               </li>
             ))}
@@ -176,15 +172,19 @@ export default function PasosDeSolvenciaPage() {
           </div>
         </section>
 
-        <section aria-labelledby="videos-titulo" className="flex flex-col gap-4">
-          <div>
-            <h2 id="videos-titulo" className="font-display text-2xl font-semibold text-slate-900">
-              Tutorial paso a paso
-            </h2>
-            <p className="mt-1 text-slate-700">El tutorial que la biblioteca publica en su página de Solvencias, junto a estos pasos.</p>
-          </div>
-          <Video {...VIDEOS[1]} />
-        </section>
+        {otrosVideos.length ? (
+          <section aria-labelledby="videos-titulo" className="flex flex-col gap-4">
+            <div>
+              <h2 id="videos-titulo" className="font-display text-2xl font-semibold text-slate-900">
+                {otrosVideos.length === 1 ? 'Tutorial paso a paso' : 'Más videos de la biblioteca'}
+              </h2>
+              <p className="mt-1 text-slate-700">{otrosVideos.length === 1 ? 'Míralo' : 'Míralos'} con calma antes de llenar el formulario.</p>
+            </div>
+            {otrosVideos.map((video, i) => (
+              <Video key={`${i}-${video.id}`} {...video} />
+            ))}
+          </section>
+        ) : null}
 
         {disponible ? (
           <div className="flex flex-col items-start gap-3 rounded-2xl bg-blue-50 p-5 sm:flex-row sm:items-center sm:justify-between">
