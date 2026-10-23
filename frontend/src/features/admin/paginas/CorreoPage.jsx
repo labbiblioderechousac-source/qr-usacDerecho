@@ -271,39 +271,18 @@ export default function CorreoPage() {
       <details className="group rounded-xl border border-border bg-white p-5">
         <summary className="cursor-pointer text-base font-bold text-slate-900">Cómo configurarlo</summary>
         <div className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-slate-700">
+          <p className="font-semibold text-slate-900">API de Gmail (gratis, funciona en la nube)</p>
           <p>
-            El correo se define con variables de entorno del servidor: en la plataforma donde se publique la biblioteca, o en <Variable>backend/.env</Variable>{' '}
-            en un equipo propio. Después de cambiarlas hay que reiniciar el servidor. Hay tres caminos:
+            <Variable>GMAIL_CLIENT_ID</Variable> y <Variable>GMAIL_CLIENT_SECRET</Variable> (del cliente OAuth de tipo Aplicación web) y, opcional,{' '}
+            <Variable>CORREO_REMITENTE</Variable> con la misma cuenta de Gmail. Con eso, la cuenta se conecta aquí arriba con <b>Conectar Gmail</b>, y se
+            vuelve a conectar igual si algún día Google la anula. También sirve el camino de antes: <Variable>CORREO_API</Variable> con{' '}
+            <Variable>gmail</Variable> y <Variable>GMAIL_REFRESH_TOKEN</Variable> generado con <Variable>npm run token-gmail</Variable>; si hay las dos, vale la
+            del panel. Para que el permiso no venza, la app de Google debe estar «En producción», no en «Prueba» (pasos en el README, «Correo con Gmail»).
           </p>
-          <div>
-            <p className="font-semibold text-slate-900">A. API de Gmail (gratis, funciona en la nube)</p>
-            <p>
-              <Variable>GMAIL_CLIENT_ID</Variable> y <Variable>GMAIL_CLIENT_SECRET</Variable> (del cliente OAuth de tipo Aplicación web) y, opcional,{' '}
-              <Variable>CORREO_REMITENTE</Variable> con la misma cuenta de Gmail. Con eso, la cuenta se conecta aquí arriba con <b>Conectar Gmail</b>, y se
-              vuelve a conectar igual si algún día Google la anula. También sirve el camino de antes: <Variable>CORREO_API</Variable> con{' '}
-              <Variable>gmail</Variable> y <Variable>GMAIL_REFRESH_TOKEN</Variable> generado con <Variable>npm run token-gmail</Variable>; si hay las dos, vale la
-              del panel. Para que el permiso no venza, la app de Google debe estar «En producción», no en «Prueba» (pasos en el README, «Correo con Gmail»).
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900">B. API de otro servicio de correo</p>
-            <p>
-              <Variable>CORREO_API</Variable> con <Variable>brevo</Variable> o <Variable>resend</Variable>, <Variable>CORREO_API_KEY</Variable> con la clave
-              que da el servicio y <Variable>CORREO_REMITENTE</Variable> con una dirección que hayas verificado allí, por ejemplo{' '}
-              <Variable>"Biblioteca Derecho" &lt;biblioteca@tu-dominio.com&gt;</Variable>.
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900">C. SMTP (Gmail, Microsoft 365, el correo de la universidad…)</p>
-            <p>
-              <Variable>SMTP_HOST</Variable>, <Variable>SMTP_PORT</Variable> (587, o 465 con conexión segura), <Variable>SMTP_USER</Variable>,{' '}
-              <Variable>SMTP_PASS</Variable> y, si el usuario no es un correo, <Variable>CORREO_REMITENTE</Variable>. Con Gmail y Microsoft 365 hace falta
-              una «contraseña de aplicación», no la contraseña normal.
-            </p>
-          </div>
-          <Nota tono="aviso" titulo="Ojo con las plataformas gratuitas">
-            Railway (planes Free, Trial y Hobby) y Render (servicios gratuitos) bloquean los puertos SMTP: ahí el camino C no funciona y hay que usar el A o el B.
-          </Nota>
+          <p>
+            Dónde se cambian esas variables: en una computadora, en <Variable>backend/.env</Variable> (después hay que reiniciar el servidor); en el sitio
+            publicado, en <b>Render → el servicio → Environment</b> (al guardar, se reinicia solo).
+          </p>
         </div>
       </details>
     </PaginaAdmin>
