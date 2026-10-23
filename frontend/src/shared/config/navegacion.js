@@ -49,10 +49,18 @@ export const PASOS_DE_SOLVENCIA = {
   resumen: 'Los pasos y el video de la biblioteca: genera tu orden, paga, verifica y envía la solicitud con las fotos.',
 };
 
-// Menú principal del sitio.
+// Menú principal del sitio. «Solvencias» se despliega con sus dos opciones (`hijos`); donde el formulario no está disponible queda un
+// solo enlace a los pasos (ver useServicios).
 export const MENU = [
   { to: '/', etiqueta: 'Inicio', exacto: true },
   { to: '/catalogo', etiqueta: 'Catálogo' },
   { to: '/sala-de-estudio', etiqueta: 'Reservas' },
-  { to: '/solvencia', etiqueta: 'Solvencia' },
+  {
+    to: '/solvencia',
+    etiqueta: 'Solvencias',
+    hijos: [
+      { to: '/solvencia', etiqueta: 'Hacer solvencia', resumen: 'Llena el formulario y sube las fotos del pago.', icono: FileCheck2, exacto: true },
+      { to: PASOS_DE_SOLVENCIA.to, etiqueta: 'Cómo hacer una solvencia', resumen: 'Los pasos y el video de la biblioteca.', icono: ListChecks },
+    ],
+  },
 ];
