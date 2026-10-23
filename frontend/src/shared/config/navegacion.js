@@ -1,4 +1,4 @@
-import { Armchair, BookOpen, FileCheck2 } from 'lucide-react';
+import { Armchair, BookOpen, FileCheck2, ListChecks } from 'lucide-react';
 
 // Los servicios del kiosco (propuesta, sección 4.5): el OPAC, la reserva de espacios de estudio (con los cubículos adentro) y el
 // formulario de solicitud de solvencia. Son las opciones de la pantalla inicial y del menú.
@@ -34,6 +34,19 @@ export const SERVICIOS = [
     resumen: 'Llena el formulario, revisa tus datos y recibe la confirmación de tu solicitud.',
   },
 ];
+
+// Donde la administración quitó el formulario de solvencia (Configuración: en la web o en los kioscos), la opción lleva a los pasos
+// para pedirla, con los videos de la biblioteca y, en el kiosco, un código QR para hacerla desde el celular (ver useServicios).
+export const PASOS_DE_SOLVENCIA = {
+  clave: 'solvencia',
+  to: '/solvencia/pasos',
+  titulo: 'Cómo pedir tu solvencia',
+  tituloCorto: 'Solvencia',
+  icono: ListChecks,
+  acento: 'red',
+  accion: 'Ver los pasos',
+  resumen: 'Los pasos, los videos de la biblioteca y un código para hacer tu solicitud desde el celular.',
+};
 
 // Menú principal del sitio.
 export const MENU = [

@@ -9,6 +9,9 @@ const { generarCodigoConfirmacion, correoValido } = require('../../utils/codigos
 // Las reservas se guardan en el almacén de datos (ver utils/almacen.js): no se pierden al reiniciar el servidor.
 const estado = almacen.cargar('reservas', { reservas: [], contador: 0 });
 const reservas = estado.reservas;
+// Sanciones que pone el personal a mano (además de la automática por no presentarse): ver «Sanciones del personal», más abajo.
+if (!Array.isArray(estado.sanciones)) estado.sanciones = [];
+const sanciones = estado.sanciones;
 
 function guardar() {
   almacen.guardar('reservas', estado);
@@ -111,13 +114,93 @@ function penalizacionDe(identificacion, ahora = new Date()) {
   );
 }
 
-// Las penalizaciones que siguen corriendo, la que termina primero arriba: el personal las ve en el panel.
+// --- Sanciones del personal ----------------------------------------------------------------------------------------
+// Además de la penalización automática, el personal puede sancionar a mano a una persona (por ejemplo, por mal uso de un cubículo):
+// elige cuántas horas queda sin poder reservar y escribe el motivo. Como con la penalización, las reservas que tenía en ese tiempo se
+// cancelan, y la sanción se puede quitar.
+const HORAS_MAXIMAS_DE_SANCION = 168;
+const sancionVigente = (s, ahora) => !s.quitada && new Date(s.hasta).getTime() > ahora.getTime();
+
+// La sanción vigente de una persona (la que termina más tarde), o null.
+function sancionDe(identificacion, ahora = new Date()) {
+  return (
+    sanciones
+      .filter((s) => sancionVigente(s, ahora) && mismaPersona(s.identificacion, identificacion))
+      .sort((a, b) => b.hasta.localeCompare(a.hasta))[0] ?? null
+  );
+}
+
+// Lo que impide reservar a una persona ahora: { tipo: 'falta', reserva, hasta } o { tipo: 'sancion', sancion, hasta }, el que dura más.
+function bloqueoDe(identificacion, ahora = new Date()) {
+  const falta = penalizacionDe(identificacion, ahora);
+  const sancion = sancionDe(identificacion, ahora);
+  if (falta && (!sancion || falta.penalizadoHasta >= sancion.hasta)) return { tipo: 'falta', reserva: falta, hasta: falta.penalizadoHasta };
+  if (sancion) return { tipo: 'sancion', sancion, hasta: sancion.hasta };
+  return null;
+}
+
+function sancionar({ identificacion, horas, motivo, reservaId } = {}, sesion, ahora = new Date()) {
+  const documento = String(identificacion ?? '').trim();
+  if (!documento) throw rechazo('Indica el carné o la identificación de la persona');
+  const cuantas = Number(horas);
+  if (!Number.isInteger(cuantas) || cuantas < 1 || cuantas > HORAS_MAXIMAS_DE_SANCION) {
+    throw rechazo(`La sanción debe ser de 1 a ${HORAS_MAXIMAS_DE_SANCION} horas sin poder reservar`);
+  }
+  const texto = String(motivo ?? '').trim().replace(/\s+/g, ' ');
+  if (texto.length < 3 || texto.length > 300) throw rechazo('Escribe el motivo de la sanción (de 3 a 300 caracteres)');
+  // El nombre y el correo salen de sus reservas (la más reciente): así el aviso le llega aunque el personal solo sepa el carné.
+  const suyas = reservas.filter((r) => mismaPersona(r.identificacion, documento)).sort((a, b) => b.creadoEn.localeCompare(a.creadoEn));
+  if (suyas.length === 0) throw rechazo('No hay reservas con ese carné: revisa que esté bien escrito', 404);
+  const relacionada = reservaId ? suyas.find((r) => r.id === reservaId) : null;
+  estado.contadorDeSanciones = (estado.contadorDeSanciones ?? 0) + 1;
+  const hasta = new Date(ahora.getTime() + cuantas * HORA_MS);
+  const sancion = {
+    id: `S-${String(estado.contadorDeSanciones).padStart(3, '0')}`,
+    identificacion: suyas[0].identificacion,
+    solicitante: suyas[0].solicitante,
+    ...(suyas.find((r) => r.correo) ? { correo: suyas.find((r) => r.correo).correo } : {}),
+    ...(relacionada ? { reservaId: relacionada.id, recursoNombre: relacionada.recursoNombre } : {}),
+    motivo: texto,
+    horas: cuantas,
+    desde: ahora.toISOString(),
+    hasta: hasta.toISOString(),
+    por: { usuario: sesion?.usuario ?? null, nombre: sesion?.nombre ?? null },
+  };
+  sanciones.push(sancion);
+  const canceladas = reservas.filter(
+    (r) => r.estado === 'reservado' && mismaPersona(r.identificacion, documento) && inicioDeReserva(r).getTime() >= ahora.getTime() && inicioDeReserva(r).getTime() < hasta.getTime()
+  );
+  canceladas.forEach((r) => {
+    r.estado = 'cancelado';
+    r.canceladaEn = ahora.toISOString();
+    r.motivoCancelacion = 'sancion';
+    r.canceladaPorSancion = sancion.id;
+  });
+  guardar();
+  return { sancion, canceladas };
+}
+
+function quitarSancion(id, sesion, ahora = new Date()) {
+  const sancion = sanciones.find((s) => s.id === id);
+  if (!sancion) return null;
+  if (!sancionVigente(sancion, ahora)) throw rechazo('Esa sanción ya terminó o ya se quitó', 409);
+  sancion.quitada = { en: ahora.toISOString(), por: sesion?.usuario ?? null };
+  guardar();
+  return sancion;
+}
+
+// Todas las sanciones del personal (vigentes, terminadas y quitadas), la más reciente primero: el historial de cada carné.
+function listarSanciones() {
+  return sanciones.slice().sort((a, b) => b.desde.localeCompare(a.desde));
+}
+
+// Quién no puede reservar ahora (por no presentarse o por una sanción), el que termina primero arriba: el personal lo ve en el panel.
 function penalizaciones(ahora = new Date()) {
   liberarVencidas(ahora);
-  return reservas
+  const faltas = reservas
     .filter((r) => penalizacionVigente(r, ahora))
-    .sort((a, b) => a.penalizadoHasta.localeCompare(b.penalizadoHasta))
     .map((r) => ({
+      tipo: 'falta',
       reservaId: r.id,
       solicitante: r.solicitante,
       identificacion: r.identificacion,
@@ -128,6 +211,21 @@ function penalizaciones(ahora = new Date()) {
       hasta: r.penalizadoHasta,
       canceladas: reservas.filter((c) => c.canceladaPorFaltaEn === r.id).map((c) => c.id),
     }));
+  const manuales = sanciones
+    .filter((s) => sancionVigente(s, ahora))
+    .map((s) => ({
+      tipo: 'sancion',
+      sancionId: s.id,
+      solicitante: s.solicitante,
+      identificacion: s.identificacion,
+      motivo: s.motivo,
+      horas: s.horas,
+      por: s.por,
+      desde: s.desde,
+      hasta: s.hasta,
+      canceladas: reservas.filter((c) => c.canceladaPorSancion === s.id).map((c) => c.id),
+    }));
+  return [...faltas, ...manuales].sort((a, b) => a.hasta.localeCompare(b.hasta));
 }
 
 function quitarPenalizacion(id, sesion, ahora = new Date()) {
@@ -293,10 +391,17 @@ function crearReserva({ tipo, recursoId, fecha, hora, horaFin, solicitante, iden
   if (!documento) {
     throw rechazo('Indica tu carné, correo institucional o documento para reservar');
   }
-  const falta = penalizacionDe(documento);
-  if (falta) {
+  const bloqueo = bloqueoDe(documento);
+  if (bloqueo?.tipo === 'falta') {
+    const falta = bloqueo.reserva;
     throw rechazo(
       `No puedes reservar hasta el ${momentoLegible(falta.penalizadoHasta)}: no te presentaste a tu reserva ${falta.id} (${falta.recursoNombre}, ${diaLegible(momentoDeReserva(falta, falta.hora))} a las ${falta.hora}). Si crees que es un error, consulta en el mostrador de la biblioteca.`,
+      403
+    );
+  }
+  if (bloqueo?.tipo === 'sancion') {
+    throw rechazo(
+      `No puedes reservar hasta el ${momentoLegible(bloqueo.hasta)}: la biblioteca te sancionó (${bloqueo.sancion.motivo}). Si crees que es un error, consulta en el mostrador de la biblioteca.`,
       403
     );
   }
@@ -426,6 +531,35 @@ function liberarReserva(id) {
   return reserva;
 }
 
+// El personal libera de una vez los lugares de quienes no han llegado y ya pasó su hora de inicio, sin esperar a que termine la
+// tolerancia. Es lo mismo que haría el sistema al vencer la tolerancia: el lugar queda libre y la persona queda penalizada por no
+// presentarse (para liberar sin castigo a quien avisó, está «No llegó» en cada reserva).
+function liberarNoLlegaron(ahora = new Date()) {
+  liberarVencidas(ahora);
+  const hoy = fechaLocal(ahora);
+  const horasDeCastigo = configuracion.horasDePenalizacion();
+  const pendientes = reservas.filter((r) => r.estado === 'reservado' && r.fecha === hoy && ahora.getTime() >= inicioDeReserva(r).getTime());
+  const penalizadas = [];
+  pendientes.forEach((reserva) => {
+    reserva.estado = 'liberada';
+    reserva.liberadaEn = ahora.toISOString();
+    reserva.motivoLiberacion = 'no_presentado';
+    reserva.liberadaPorElPersonal = true;
+    if (horasDeCastigo > 0) penalizadas.push(penalizar(reserva, ahora, horasDeCastigo));
+  });
+  if (pendientes.length > 0) guardar();
+  penalizadas.forEach((penalizada) =>
+    avisosDePenalizacion.forEach((avisar) => {
+      try {
+        avisar(penalizada);
+      } catch (err) {
+        console.error('No se pudo avisar de una penalización:', err.message);
+      }
+    })
+  );
+  return pendientes;
+}
+
 // Cuántos lugares de cada tipo hay ocupados en esta hora: con la persona adentro, o reservados y esperando a que llegue.
 function ocupacionAhora(ahora = new Date()) {
   const hoy = fechaLocal(ahora);
@@ -450,6 +584,12 @@ function resumen() {
     // Las de hoy que el personal todavía tiene que atender (esperando a la persona o con la persona adentro): el aviso del menú.
     porAtenderHoy: reservas.filter((r) => r.fecha === hoy && ['reservado', 'en_uso'].includes(r.estado)).length,
     liberadas: reservas.filter((r) => r.estado === 'liberada').length,
+    // Los lugares que se liberaron en la última hora porque la persona no llegó: el panel lo avisa (con voz, si se quiere).
+    liberadasRecientes: reservas
+      .filter((r) => r.estado === 'liberada' && r.motivoLiberacion === 'no_presentado' && r.liberadaEn && Date.now() - new Date(r.liberadaEn).getTime() < HORA_MS)
+      .sort((a, b) => b.liberadaEn.localeCompare(a.liberadaEn))
+      .slice(0, 10)
+      .map(({ id, solicitante, recursoNombre, liberadaEn }) => ({ id, solicitante, recursoNombre, liberadaEn })),
   };
 }
 
@@ -470,4 +610,10 @@ module.exports = {
   penalizacionDe,
   penalizaciones,
   quitarPenalizacion,
+  bloqueoDe,
+  sancionar,
+  quitarSancion,
+  listarSanciones,
+  liberarNoLlegaron,
+  HORAS_MAXIMAS_DE_SANCION,
 };

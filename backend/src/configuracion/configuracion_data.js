@@ -26,6 +26,11 @@ const MINUTOS_DE_INACTIVIDAD = [0, 10, 20, 30, 60, 120, 240, 480];
 const INACTIVIDAD_INICIAL = { administrador: 0, circulacion: 20, tesis: 20, consulta: 20 };
 const textoDeMinutos = (minutos) => (minutos === 0 ? 'nunca' : `${minutos} min`);
 
+// Dónde se puede llenar el formulario de solicitud de solvencia. En el kiosco de la entrada no hay cámara para las fotos del pago: la
+// administración puede quitar ahí la opción y el kiosco muestra los pasos y un código QR para hacerla desde el celular.
+const CANALES_DE_SOLVENCIA = { web: 'la web', kiosco: 'los kioscos' };
+const SOLVENCIA_INICIAL = { web: true, kiosco: true };
+
 const INICIAL = {
   toleranciaMinutos: CONDICIONES.toleranciaMinutos,
   horasDePenalizacion: CONDICIONES.horasDePenalizacion,
@@ -34,6 +39,7 @@ const INICIAL = {
   reservasPausadas: Object.fromEntries(TIPOS_DE_RESERVA.map((tipo) => [tipo, false])),
   camposImportantes: CAMPOS_IMPORTANTES_INICIALES,
   minutosDeInactividad: INACTIVIDAD_INICIAL,
+  solvenciaDisponible: SOLVENCIA_INICIAL,
   actualizadaEn: null,
   actualizadaPor: null,
 };
@@ -45,6 +51,7 @@ const estado = {
   ...guardado,
   reservasPausadas: { ...INICIAL.reservasPausadas, ...guardado.reservasPausadas },
   minutosDeInactividad: { ...INACTIVIDAD_INICIAL, ...guardado.minutosDeInactividad },
+  solvenciaDisponible: { ...SOLVENCIA_INICIAL, ...guardado.solvenciaDisponible },
 };
 // Los topes de horas se llamaban «cubiculoMaxHorasPor...» cuando solo valían para los cubículos: se conservan los valores guardados.
 if (guardado.maxHorasPorReserva === undefined && guardado.cubiculoMaxHorasPorReserva !== undefined) {
@@ -69,6 +76,7 @@ function obtener() {
     camposImportantes: [...estado.camposImportantes],
     camposDeTesis: Object.entries(CAMPOS_DE_TESIS).map(([campo, nombre]) => ({ campo, nombre })),
     minutosDeInactividad: { ...estado.minutosDeInactividad },
+    solvenciaDisponible: { ...estado.solvenciaDisponible },
     actualizadaEn: estado.actualizadaEn,
     actualizadaPor: estado.actualizadaPor,
     limites: {
@@ -84,6 +92,11 @@ function obtener() {
 // Minutos de inactividad que cierran la sesión de un rol (0: nunca).
 function minutosDeInactividad(rol) {
   return estado.minutosDeInactividad[rol] ?? 20;
+}
+
+// Si se puede llenar la solicitud de solvencia en la web y en los kioscos: { web, kiosco }.
+function solvenciaDisponible() {
+  return { ...estado.solvenciaDisponible };
 }
 
 function toleranciaMinutos() {
@@ -137,6 +150,7 @@ function actualizar(
     maxHorasPorDia: porDia,
     camposImportantes: importantes,
     minutosDeInactividad: inactividad,
+    solvenciaDisponible: canales,
   } = {},
   sesion
 ) {
@@ -196,6 +210,19 @@ function actualizar(
     });
   }
 
+  const nuevosCanales = { ...estado.solvenciaDisponible };
+  if (canales !== undefined) {
+    if (typeof canales !== 'object' || canales === null || Array.isArray(canales)) {
+      throw rechazo('Indica dónde se puede pedir la solvencia');
+    }
+    Object.entries(canales).forEach(([canal, disponible]) => {
+      if (!Object.hasOwn(CANALES_DE_SOLVENCIA, canal) || typeof disponible !== 'boolean') {
+        throw rechazo('Los datos de la solicitud de solvencia no son válidos');
+      }
+      nuevosCanales[canal] = disponible;
+    });
+  }
+
   const cambios = [];
   if (nuevaTolerancia !== estado.toleranciaMinutos) {
     cambios.push(`tolerancia ${estado.toleranciaMinutos} → ${nuevaTolerancia} min`);
@@ -224,7 +251,14 @@ function actualizar(
     }
   });
 
+  Object.keys(CANALES_DE_SOLVENCIA).forEach((canal) => {
+    if (nuevosCanales[canal] !== estado.solvenciaDisponible[canal]) {
+      cambios.push(`solicitud de solvencia en ${CANALES_DE_SOLVENCIA[canal]}: ${nuevosCanales[canal] ? 'activada' : 'desactivada'}`);
+    }
+  });
+
   if (cambios.length > 0) {
+    estado.solvenciaDisponible = nuevosCanales;
     estado.minutosDeInactividad = nuevaInactividad;
     estado.camposImportantes = nuevosImportantes;
     estado.toleranciaMinutos = nuevaTolerancia;
@@ -250,5 +284,6 @@ module.exports = {
   tiposPausados,
   mensajeDePausa,
   minutosDeInactividad,
+  solvenciaDisponible,
   actualizar,
 };

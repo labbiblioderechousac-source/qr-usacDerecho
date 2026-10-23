@@ -6,6 +6,7 @@ import BarraLateral from './componentes/BarraLateral';
 import MiCuentaModal from './MiCuentaModal';
 import { SECCIONES } from './secciones';
 import { ProveedorDeSesion } from './SesionAdmin';
+import { useAvisosDeReservas } from './useAvisosDeReservas';
 import { useAvisosDeSolvencia } from './useAvisosDeSolvencia';
 import { useCierrePorInactividad } from './useCierrePorInactividad';
 import { useContadoresDelPanel } from './useContadoresDelPanel';
@@ -92,6 +93,7 @@ export default function AdminLayout() {
   });
 
   useAvisosDeSolvencia(sesion?.rol);
+  useAvisosDeReservas(sesion?.rol);
 
   // El cajón del menú (pantallas chicas) se cierra al cambiar de sección y con Escape.
   useEffect(() => {

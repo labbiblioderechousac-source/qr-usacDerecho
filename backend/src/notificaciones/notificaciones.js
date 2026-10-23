@@ -206,6 +206,31 @@ function mensajeDeNoPresentado(r, canceladas = []) {
   };
 }
 
+// Cuando el personal sanciona a mano a alguien (por ejemplo, por mal uso de un lugar): hasta cuándo no puede reservar y por qué.
+function mensajeDeSancion(s, canceladas = []) {
+  return {
+    tipo: 'reserva_sancion',
+    asunto: 'Sanción en el servicio de reservas de la biblioteca',
+    ...plantilla({
+      titulo: 'No podrás reservar por un tiempo',
+      previa: `Puedes volver a reservar desde el ${momentoLargo(s.hasta)}`,
+      filas: [
+        ['A nombre de', s.solicitante],
+        ['Carné', s.identificacion],
+        ['Motivo', s.motivo],
+        ['Puedes volver a reservar desde el', momentoLargo(s.hasta)],
+        ...(canceladas.length > 0
+          ? [['Reservas canceladas', canceladas.map((c) => `${c.id}: ${c.recursoNombre}, ${fechaLarga(c.fecha)}, de ${c.hora} a ${c.horaFin}`).join('; ')]]
+          : []),
+      ],
+      parrafos: [
+        `El personal de la biblioteca te sancionó en el servicio de reservas: durante ${s.horas} horas no podrás reservar ningún lugar de estudio${canceladas.length > 0 ? ', y las reservas que tenías en ese tiempo se cancelaron' : ''}.`,
+        `Si crees que es un error, consulta en el mostrador de la biblioteca o escríbenos por ${biblioteca.contacto}.`,
+      ],
+    }),
+  };
+}
+
 // Para que el administrador compruebe desde el panel que el servidor sí puede enviar correos.
 function mensajeDePrueba({ quien, cuando = new Date() }) {
   const { fecha, hora } = fechaYHora(cuando.toISOString());
@@ -283,6 +308,10 @@ function reservaLiberada(reserva) {
   return avisarPorCorreo({ para: reserva.correo, ...mensajeDeReservaLiberada(reserva) });
 }
 
+function sancionPuesta({ sancion, canceladas }) {
+  return avisarPorCorreo({ para: sancion.correo, ...mensajeDeSancion(sancion, canceladas) });
+}
+
 // Si la reserva a la que faltó no tenía correo, se usa el de alguna de las que se cancelaron.
 function noSePresento({ reserva, canceladas }) {
   const para = reserva.correo || canceladas.find((c) => c.correo)?.correo;
@@ -308,4 +337,6 @@ module.exports = {
   solvenciaRecibida,
   solvenciaAprobada,
   solvenciaRechazada,
+  mensajeDeSancion,
+  sancionPuesta,
 };

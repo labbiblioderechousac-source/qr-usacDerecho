@@ -12,6 +12,7 @@ const {
 const fotosData = require('./fotos_data');
 const { constanciaDeSolvencia, nombreDeLaConstancia } = require('./constancia_pdf');
 const notificaciones = require('../notificaciones/notificaciones');
+const configuracion = require('../configuracion/configuracion_data');
 const { registrar } = require('../actividad/actividad_data');
 const { ok, fail, notFound } = require('../../utils/httpResponse');
 
@@ -27,6 +28,8 @@ function getReglas(req, res) {
     diasMaximosDeAnticipacion: DIAS_MAXIMOS_DE_ANTICIPACION,
     entregaSiEnviasAhora: entregaEstimada(),
     fotos: { tipos: fotosData.TIPOS, maximoBytes: fotosData.MAXIMO_BYTES },
+    // Dónde está el formulario: el sitio quita la opción del menú donde la administración lo apagó.
+    disponible: configuracion.solvenciaDisponible(),
   });
 }
 

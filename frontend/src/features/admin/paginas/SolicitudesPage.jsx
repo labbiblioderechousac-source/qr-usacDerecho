@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BellRing, Check, FileDown, FolderCheck, FolderOpen, ImageOff, Loader2, RefreshCw, TriangleAlert, Volume2, X } from 'lucide-react';
+import { Check, FileDown, FolderCheck, FolderOpen, ImageOff, Loader2, RefreshCw, TriangleAlert, X } from 'lucide-react';
 import { solvenciaApi } from '../../solvencia/solvenciaApi';
 import { usePaginaLocal } from '../usePaginaLocal';
 import { useSesionAdmin } from '../SesionAdmin';
-import { EVENTO_SOLVENCIA_NUEVA, anunciar, guardarPreferencias, leerPreferencias } from '../useAvisosDeSolvencia';
+import { EVENTO_SOLVENCIA_NUEVA } from '../useAvisosDeSolvencia';
+import AvisosDeEstaPc from '../componentes/AvisosDeEstaPc';
 import { elegirCarpeta, estadoDeLaCarpeta, guardarEnLaPc, pedirPermiso } from '../carpetaDeSolvencias';
 import { getErrorMessage } from '../../../shared/api/axiosClient';
 import AlertBanner from '../../../shared/components/AlertBanner';
@@ -112,50 +113,6 @@ function CarpetaDeEstaPc({ carpeta, onCambio }) {
           {carpeta.estado === 'sin_carpeta' ? 'Elegir carpeta' : 'Cambiar'}
         </Button>
       ) : null}
-    </div>
-  );
-}
-
-// --- Avisos con voz en esta PC ----------------------------------------------------------------------------------------
-
-function AvisosDeEstaPc() {
-  const [preferencias, setPreferencias] = useState(leerPreferencias);
-  const [permiso, setPermiso] = useState(() => ('Notification' in window ? Notification.permission : 'no_se_puede'));
-
-  function cambiar(campo, valor) {
-    const nuevas = { ...preferencias, [campo]: valor };
-    setPreferencias(nuevas);
-    guardarPreferencias(nuevas);
-  }
-
-  async function permitirNotificaciones() {
-    setPermiso(await Notification.requestPermission());
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border bg-white px-4 py-3 text-sm">
-      <span className="flex items-center gap-2 font-semibold text-slate-900">
-        <BellRing size={18} className="text-primary" aria-hidden="true" /> Avisos cuando llega una solicitud
-      </span>
-      <Checkbox checked={preferencias.voz} onChange={(e) => cambiar('voz', e.target.checked)}>
-        Con voz
-      </Checkbox>
-      <Checkbox checked={preferencias.notificacion} onChange={(e) => cambiar('notificacion', e.target.checked)}>
-        Notificación de Windows
-      </Checkbox>
-      {preferencias.notificacion && permiso === 'default' ? (
-        <button type="button" onClick={permitirNotificaciones} className="text-xs font-semibold text-primary hover:underline">
-          Permitir notificaciones
-        </button>
-      ) : null}
-      {preferencias.notificacion && permiso === 'denied' ? <span className="text-xs text-amber-700">El navegador tiene bloqueadas las notificaciones de este sitio.</span> : null}
-      <button
-        type="button"
-        onClick={() => anunciar('Así suena el aviso: llegó una nueva solicitud de solvencia.', preferencias)}
-        className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-      >
-        <Volume2 size={14} aria-hidden="true" /> Probar aviso
-      </button>
     </div>
   );
 }
@@ -455,7 +412,7 @@ export default function SolicitudesPage() {
       {esAdministrador ? (
         <div className="grid gap-3 xl:grid-cols-2">
           <CarpetaDeEstaPc carpeta={carpeta} onCambio={revisarCarpeta} />
-          <AvisosDeEstaPc />
+          <AvisosDeEstaPc titulo="Avisos cuando llega una solicitud" ejemplo="llegó una nueva solicitud de solvencia." />
         </div>
       ) : null}
 

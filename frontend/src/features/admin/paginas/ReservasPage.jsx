@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Armchair, Ban, DoorClosed, Loader2, MonitorSmartphone, Printer, RefreshCw, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Armchair, Ban, DoorClosed, DoorOpen, Gavel, History, Loader2, MonitorSmartphone, Printer, RefreshCw, Search } from 'lucide-react';
 import { adminApi } from '../adminApi';
 import { reservasApi } from '../../reservas/reservasApi';
 import PlanoDelLugar from '../../reservas/PlanoDelLugar';
 import { useSesionAdmin } from '../SesionAdmin';
+import { EVENTO_LUGAR_LIBERADO } from '../useAvisosDeReservas';
+import AvisosDeEstaPc from '../componentes/AvisosDeEstaPc';
+import ModalDeSancion from '../componentes/ModalDeSancion';
 import { useImpresionDeBoleta } from '../componentes/BoletaDeReserva';
 import { usePaginaLocal } from '../usePaginaLocal';
 import { getErrorMessage } from '../../../shared/api/axiosClient';
@@ -39,6 +42,8 @@ const ACCION_DE_LA_API = {
   liberar: reservasApi.liberar,
   cancelar: reservasApi.cancelar,
   quitar_penalizacion: reservasApi.quitarPenalizacion,
+  quitar_sancion: reservasApi.quitarSancion,
+  liberar_todos: () => reservasApi.liberarNoLlegaron(),
 };
 
 // "21/10/2026 09:15", en hora de la biblioteca.
@@ -47,17 +52,28 @@ function momento(iso) {
   return `${fecha} ${hora}`;
 }
 
-// Cuánto lugar queda de cada tipo, ahora mismo.
-function OcupacionDeLugares({ tipo, datos }) {
+// Cuánto lugar queda de cada tipo, ahora mismo. Con un clic, la tabla de abajo muestra las reservas de hoy de ese tipo.
+function OcupacionDeLugares({ tipo, datos, activo, onElegir }) {
   const Icono = ICONO_DEL_TIPO[tipo];
   const ocupados = datos.enUso + datos.esperando;
   const libres = datos.total - ocupados;
   const porcentaje = (cantidad) => (datos.total ? (cantidad / datos.total) * 100 : 0);
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
+    <button
+      type="button"
+      onClick={onElegir}
+      aria-pressed={activo}
+      title={`Ver las reservas de hoy: ${TIPO_EN_PLURAL[tipo].toLowerCase()}`}
+      className={`rounded-xl border bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        activo ? 'border-primary ring-2 ring-primary/20' : 'border-border'
+      }`}
+    >
       <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
         <Icono size={16} className="text-primary" aria-hidden="true" />
         {TIPO_EN_PLURAL[tipo]}
+        <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-bold ${libres > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+          {libres > 0 ? `${libres} libres` : 'Lleno'}
+        </span>
       </p>
       <p className="mt-2 flex items-baseline gap-1.5">
         <span className="font-heading text-3xl font-semibold leading-none text-primary-dark">{ocupados}</span>
@@ -70,17 +86,18 @@ function OcupacionDeLugares({ tipo, datos }) {
       <p className="mt-2 text-xs text-slate-500">
         {datos.enUso} en uso · {datos.esperando} esperando · {libres} libres
       </p>
-    </div>
+    </button>
   );
 }
 
-function GrupoDeAtencion({ titulo, color, cantidad, vacio, children }) {
+function GrupoDeAtencion({ titulo, color, cantidad, vacio, accion, children }) {
   return (
     <div>
-      <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+      <h3 className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-900">
         <span className={`h-2.5 w-2.5 rounded-full ${color}`} aria-hidden="true" />
         {titulo}
-        <span className="text-xs font-semibold text-slate-400">{cantidad}</span>
+        <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-slate-500">{cantidad}</span>
+        {accion ? <span className="ml-auto">{accion}</span> : null}
       </h3>
       {cantidad === 0 ? <p className="mt-1.5 text-sm text-slate-400">{vacio}</p> : <ul className="mt-1 divide-y divide-border">{children}</ul>}
     </div>
@@ -106,9 +123,64 @@ function BotonDeBoleta({ onImprimir, grande = false }) {
 
 const sinEspacios = (texto) => String(texto ?? '').replace(/\s+/g, '').toLowerCase();
 
+// Todo lo de un carné: cuántas veces reservó, a cuántas no llegó, sus sanciones (vigentes, terminadas o quitadas) y el botón para
+// sancionarlo.
+function HistorialDelCarne({ reservas, sanciones, onSancionar }) {
+  const cuenta = (condicion) => reservas.filter(condicion).length;
+  const datos = [
+    ['Reservas', reservas.length],
+    ['Usadas', cuenta((r) => r.estado === 'finalizado' || r.estado === 'en_uso')],
+    ['No llegó', cuenta((r) => r.estado === 'liberada' && r.motivoLiberacion === 'no_presentado')],
+    ['Canceladas', cuenta((r) => r.estado === 'cancelado')],
+    ['Sanciones', sanciones.length],
+  ];
+  const persona = reservas[0];
+  const ahora = Date.now();
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface/60 p-4" data-testid="historial-del-carne">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+          <History size={16} className="text-primary" aria-hidden="true" /> Historial de {persona.solicitante}
+        </h3>
+        <Button variant="secondary" icon={Gavel} onClick={() => onSancionar({ identificacion: persona.identificacion, solicitante: persona.solicitante })}>
+          Sancionar
+        </Button>
+      </div>
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {datos.map(([etiqueta, valor]) => (
+          <div key={etiqueta} className="rounded-md bg-white px-3 py-2 ring-1 ring-border">
+            <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{etiqueta}</dt>
+            <dd className={`font-heading text-xl font-semibold ${etiqueta === 'No llegó' && valor > 0 ? 'text-amber-700' : etiqueta === 'Sanciones' && valor > 0 ? 'text-red-700' : 'text-slate-900'}`}>
+              {valor}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {sanciones.length > 0 ? (
+        <ul className="flex flex-col gap-1.5 text-xs">
+          {sanciones.map((s) => {
+            const situacion = s.quitada ? 'Quitada' : new Date(s.hasta).getTime() > ahora ? 'Vigente' : 'Terminó';
+            return (
+              <li key={s.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md bg-white px-3 py-2 ring-1 ring-border">
+                <Badge tone={situacion === 'Vigente' ? 'danger' : 'neutral'}>{situacion}</Badge>
+                <span className="font-mono text-slate-500">{s.id}</span>
+                <span className="font-semibold text-slate-800">{s.motivo}</span>
+                <span className="text-slate-500">
+                  · {s.horas} h, desde el {momento(s.desde)}
+                  {s.por?.nombre ? ` · por ${s.por.nombre}` : ''}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 // Busca las reservas de un estudiante por su carné o identificación, para imprimirle la boleta cuando llega al mostrador. Muestra
-// primero las de hoy que siguen vigentes, luego las próximas y al final las anteriores.
-function BuscarPorCarne({ reservas, penalizaciones, hoy, onImprimir }) {
+// primero las de hoy que siguen vigentes, luego las próximas y al final las anteriores, y debajo su historial.
+function BuscarPorCarne({ reservas, penalizaciones, sanciones, hoy, onImprimir, onSancionar }) {
   const [texto, setTexto] = useState('');
   const [buscado, setBuscado] = useState('');
 
@@ -128,6 +200,14 @@ function BuscarPorCarne({ reservas, penalizaciones, hoy, onImprimir }) {
       .slice(0, 6);
   }, [reservas, buscado, hoy]);
   const penalizacion = buscado ? penalizaciones.find((p) => sinEspacios(p.identificacion) === sinEspacios(buscado)) : null;
+  const delCarne = useMemo(() => {
+    if (encontradas.length === 0) return null;
+    const carne = sinEspacios(encontradas[0].identificacion);
+    return {
+      reservas: reservas.filter((r) => sinEspacios(r.identificacion) === carne).sort((a, b) => b.creadoEn.localeCompare(a.creadoEn)),
+      sanciones: sanciones.filter((s) => sinEspacios(s.identificacion) === carne),
+    };
+  }, [encontradas, reservas, sanciones]);
 
   return (
     <section className="flex flex-col gap-4 rounded-xl border border-border bg-white p-5" aria-labelledby="boleta-por-carne">
@@ -165,8 +245,17 @@ function BuscarPorCarne({ reservas, penalizaciones, hoy, onImprimir }) {
 
       {penalizacion ? (
         <Nota tono="aviso" titulo="Este carné no puede reservar">
-          No se presentó a su reserva {penalizacion.reservaId} ({penalizacion.recursoNombre}, {fechaCorta(penalizacion.fecha)} a las {penalizacion.hora}) y no
-          puede reservar hasta el <b>{momento(penalizacion.hasta)}</b>. Si avisó o fue un error, quítale la penalización en «Sin poder reservar», más abajo.
+          {penalizacion.tipo === 'sancion' ? (
+            <>
+              Tiene una sanción ({penalizacion.motivo}) y no puede reservar hasta el <b>{momento(penalizacion.hasta)}</b>. Si fue un error, quítasela en «Sin poder reservar», más
+              abajo.
+            </>
+          ) : (
+            <>
+              No se presentó a su reserva {penalizacion.reservaId} ({penalizacion.recursoNombre}, {fechaCorta(penalizacion.fecha)} a las {penalizacion.hora}) y no puede reservar
+              hasta el <b>{momento(penalizacion.hasta)}</b>. Si avisó o fue un error, quítale la penalización en «Sin poder reservar», más abajo.
+            </>
+          )}
         </Nota>
       ) : null}
 
@@ -206,39 +295,53 @@ function BuscarPorCarne({ reservas, penalizaciones, hoy, onImprimir }) {
           </ul>
         )
       ) : null}
+      {delCarne ? <HistorialDelCarne reservas={delCarne.reservas} sanciones={delCarne.sanciones} onSancionar={onSancionar} /> : null}
     </section>
   );
 }
 
-// Las personas que no se presentaron a una reserva y por eso no pueden reservar por un tiempo. Si avisaron o fue un error, el personal
-// les quita la penalización.
+// Quién no puede reservar por un tiempo: por no presentarse a una reserva (automático) o por una sanción del personal. Si avisó o fue un
+// error, el personal se la quita.
 function SinPoderReservar({ lista, ocupado, onQuitar }) {
+  const cancelaron = (n) => (n > 0 ? ` · ${n} reserva${n === 1 ? '' : 's'} cancelada${n === 1 ? '' : 's'}` : '');
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-5" aria-labelledby="sin-poder-reservar">
       <div>
         <h2 id="sin-poder-reservar" className="flex items-center gap-2 text-base font-bold text-slate-900">
           <Ban size={17} className="text-amber-600" aria-hidden="true" />
-          Sin poder reservar por no presentarse
-          <span className="text-xs font-semibold text-slate-400">{lista.length}</span>
+          Sin poder reservar
+          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{lista.length}</span>
         </h2>
-        <p className="mt-0.5 text-sm text-slate-600">No llegaron a su reserva: hasta la hora indicada no pueden reservar ningún lugar de estudio.</p>
+        <p className="mt-0.5 text-sm text-slate-600">Por no llegar a su reserva o por una sanción: hasta la hora indicada no pueden reservar ningún lugar de estudio.</p>
       </div>
       <ul className="divide-y divide-border">
         {lista.map((p) => (
-          <li key={p.reservaId} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+          <li key={p.sancionId ?? p.reservaId} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
             <div className="min-w-0 flex-1 basis-48">
-              <p className="truncate text-sm font-semibold text-slate-900">{p.solicitante}</p>
+              <p className="flex items-center gap-2 truncate text-sm font-semibold text-slate-900">
+                {p.solicitante}
+                <Badge tone={p.tipo === 'sancion' ? 'danger' : 'warning'}>{p.tipo === 'sancion' ? 'Sanción' : 'No llegó'}</Badge>
+              </p>
               <p className="font-mono text-xs text-slate-500">{p.identificacion}</p>
             </div>
             <p className="min-w-0 flex-1 basis-56 text-xs text-slate-600">
-              Faltó a <span className="font-mono">{p.reservaId}</span> · {p.recursoNombre}, {fechaCorta(p.fecha)} {p.hora}
-              {p.canceladas.length > 0 ? ` · ${p.canceladas.length} reserva${p.canceladas.length === 1 ? '' : 's'} cancelada${p.canceladas.length === 1 ? '' : 's'}` : ''}
+              {p.tipo === 'sancion' ? (
+                <>
+                  {p.motivo}
+                  {p.por?.nombre ? ` · por ${p.por.nombre}` : ''}
+                </>
+              ) : (
+                <>
+                  Faltó a <span className="font-mono">{p.reservaId}</span> · {p.recursoNombre}, {fechaCorta(p.fecha)} {p.hora}
+                </>
+              )}
+              {cancelaron(p.canceladas.length)}
             </p>
             <p className="text-sm text-slate-700">
               Hasta el <b className="font-mono">{momento(p.hasta)}</b>
             </p>
             <button type="button" disabled={ocupado} onClick={() => onQuitar(p)} className="text-xs font-semibold text-primary hover:underline disabled:opacity-50">
-              Quitar penalización
+              {p.tipo === 'sancion' ? 'Quitar sanción' : 'Quitar penalización'}
             </button>
           </li>
         ))}
@@ -272,6 +375,26 @@ function ContenidoDeConfirmacion({ tipo, reserva, reloj }) {
   const lugar = <b>{reserva.recursoNombre}</b>;
   const persona = <b>{reserva.solicitante}</b>;
   const aviso = reserva.correo ? <p>Le avisaremos por correo a {reserva.correo}.</p> : null;
+  if (tipo === 'liberar_todos') {
+    return (
+      <>
+        <p>
+          Se liberan ahora los lugares de las <b>{reserva.cantidad}</b> personas que no han llegado y cuya hora ya empezó, sin esperar a que termine la tolerancia. Otras
+          personas podrán reservarlos enseguida.
+        </p>
+        <p>Como no se presentaron, quedan sin poder reservar el tiempo de la configuración (igual que si el sistema las liberara solo) y, si dejaron correo, se les avisa.</p>
+        <p className="text-slate-500">Para liberar sin castigo a alguien que avisó que no vendría, usa «No llegó» en su reserva.</p>
+      </>
+    );
+  }
+  if (tipo === 'quitar_sancion') {
+    return (
+      <p>
+        {persona} (carné <span className="font-mono">{reserva.identificacion}</span>) podrá reservar otra vez desde ahora. Las reservas que se le cancelaron por la sanción no
+        vuelven.
+      </p>
+    );
+  }
   if (tipo === 'quitar_penalizacion') {
     return (
       <p>
@@ -320,9 +443,15 @@ const TEXTOS_DE_CONFIRMACION = {
   cancelar: { titulo: '¿Cancelar la reserva?', boton: 'Sí, cancelar la reserva', volver: 'No, mantenerla', peligro: true },
   salida: { titulo: '¿Registrar la salida?', boton: 'Sí, registrar la salida', volver: 'Volver', peligro: false },
   quitar_penalizacion: { titulo: '¿Quitar la penalización?', boton: 'Sí, ya puede reservar', volver: 'No, dejarla', peligro: false },
+  quitar_sancion: { titulo: '¿Quitar la sanción?', boton: 'Sí, ya puede reservar', volver: 'No, dejarla', peligro: false },
+  liberar_todos: { titulo: '¿Liberar a los que no llegaron?', boton: 'Sí, liberar los lugares', volver: 'No, esperar', peligro: true },
 };
 
 function avisoDeResultado(tipo, reserva) {
+  if (tipo === 'liberar_todos') {
+    return reserva.length > 0 ? `Se liberaron ${reserva.length} lugares: ${reserva.map((r) => r.recursoNombre).join(', ')}.` : 'No había nadie por liberar.';
+  }
+  if (tipo === 'quitar_sancion') return `Sanción quitada: ${reserva.solicitante} ya puede reservar.`;
   if (tipo === 'quitar_penalizacion') return `Penalización quitada: ${reserva.solicitante} ya puede reservar.`;
   if (tipo === 'ingreso') return `Ingreso registrado: ${reserva.solicitante} ya está en ${reserva.recursoNombre}.`;
   if (tipo === 'salida') {
@@ -341,6 +470,7 @@ function notaDelEstado(r) {
   }
   if (r.estado === 'liberada' && r.motivoLiberacion) return MOTIVO_LIBERACION[r.motivoLiberacion] ?? r.motivoLiberacion;
   if (r.estado === 'cancelado' && r.motivoCancelacion === 'penalizacion') return `Cancelada porque no se presentó a ${r.canceladaPorFaltaEn}`;
+  if (r.estado === 'cancelado' && r.motivoCancelacion === 'sancion') return `Cancelada por la sanción ${r.canceladaPorSancion}`;
   if (r.estado === 'finalizado' && r.salioAntes) return `Se fue antes: liberó de ${r.horaFin} a ${r.horaFinOriginal}`;
   if (r.estado === 'finalizado' && r.salidaAutomatica) return 'Se cerró sola al terminar su hora';
   if (r.estado === 'en_uso' && r.ingresoEn) return `Adentro desde las ${fechaYHora(r.ingresoEn).hora}`;
@@ -356,6 +486,9 @@ export default function ReservasPage() {
   const [tolerancia, setTolerancia] = useState(15);
   const [horasDePenalizacion, setHorasDePenalizacion] = useState(0);
   const [penalizaciones, setPenalizaciones] = useState([]);
+  const [sanciones, setSanciones] = useState([]); // todas las del personal: el historial de cada carné
+  const [sancionando, setSancionando] = useState(null); // { identificacion, solicitante, reservaId? } mientras se llena la sanción
+  const tabla = useRef(null);
   const [ahora, setAhora] = useState(() => new Date());
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -372,9 +505,10 @@ export default function ReservasPage() {
 
   const cargar = useCallback(async () => {
     try {
-      const [lista, resumen, castigos] = await Promise.all([reservasApi.listar(), adminApi.resumen(), reservasApi.penalizaciones()]);
+      const [lista, resumen, castigos, historial] = await Promise.all([reservasApi.listar(), adminApi.resumen(), reservasApi.penalizaciones(), reservasApi.sanciones()]);
       setReservas(lista.data.data);
       setPenalizaciones(castigos.data.data);
+      setSanciones(historial.data.data);
       setLugares(resumen.data.data.reservas.lugares);
       setAhora(new Date());
       setError('');
@@ -401,6 +535,12 @@ export default function ReservasPage() {
     return () => clearInterval(intervalo);
   }, [cargar]);
 
+  // Cuando el aviso de la PC detecta que un lugar se liberó (alguien no llegó), la página se actualiza sola.
+  useEffect(() => {
+    window.addEventListener(EVENTO_LUGAR_LIBERADO, cargar);
+    return () => window.removeEventListener(EVENTO_LUGAR_LIBERADO, cargar);
+  }, [cargar]);
+
   useEffect(() => {
     if (!aviso) return undefined;
     const temporizador = setTimeout(() => setAviso(''), 7000);
@@ -411,7 +551,7 @@ export default function ReservasPage() {
     setTrabajando(true);
     setErrorDeConfirmacion('');
     try {
-      const res = await ACCION_DE_LA_API[accion](reserva.id);
+      const res = await ACCION_DE_LA_API[accion](accion === 'quitar_sancion' ? reserva.sancionId : reserva.id);
       setAviso(avisoDeResultado(accion, res.data.data));
       setError('');
       setConfirmacion(null);
@@ -436,8 +576,25 @@ export default function ReservasPage() {
       onCancelar={() => setConfirmacion({ tipo: 'cancelar', reserva })}
       />
       <BotonDeBoleta onImprimir={() => boleta.imprimir(reserva)} />
+      <button
+        type="button"
+        onClick={() => setSancionando({ identificacion: reserva.identificacion, solicitante: reserva.solicitante, reservaId: reserva.id })}
+        className="inline-flex items-center gap-1 text-xs font-semibold text-secondary hover:underline"
+        title="Sancionar a esta persona: queda un tiempo sin poder reservar"
+      >
+        <Gavel size={13} aria-hidden="true" />
+        Sancionar
+      </button>
     </>
   );
+
+  // Con un clic en una tarjeta de ocupación, la tabla muestra las reservas de hoy de ese tipo (otro clic quita el filtro).
+  function elegirTipo(t) {
+    const quitar = tipo === t;
+    setTipo(quitar ? '' : t);
+    if (!quitar) setAlcance('hoy');
+    tabla.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   const reloj = relojDeLaBiblioteca(ahora);
 
@@ -505,18 +662,33 @@ export default function ReservasPage() {
       {lugares ? (
         <div className="grid gap-3 sm:grid-cols-3">
           {TIPOS.map((t) => (
-            <OcupacionDeLugares key={t} tipo={t} datos={lugares[t]} />
+            <OcupacionDeLugares key={t} tipo={t} datos={lugares[t]} activo={tipo === t} onElegir={() => elegirTipo(t)} />
           ))}
         </div>
       ) : null}
 
-      <BuscarPorCarne reservas={reservas} penalizaciones={penalizaciones} hoy={reloj.fecha} onImprimir={boleta.imprimir} />
+      <AvisosDeEstaPc titulo="Avisos cuando se libera un lugar" ejemplo="se liberó la Estación 4: Ana Pérez no llegó a su reserva." />
+
+      <BuscarPorCarne
+        reservas={reservas}
+        penalizaciones={penalizaciones}
+        sanciones={sanciones}
+        hoy={reloj.fecha}
+        onImprimir={boleta.imprimir}
+        onSancionar={setSancionando}
+      />
 
       {penalizaciones.length > 0 ? (
         <SinPoderReservar
           lista={penalizaciones}
           ocupado={trabajando}
-          onQuitar={(p) => setConfirmacion({ tipo: 'quitar_penalizacion', reserva: { id: p.reservaId, solicitante: p.solicitante, identificacion: p.identificacion } })}
+          onQuitar={(p) =>
+            setConfirmacion(
+              p.tipo === 'sancion'
+                ? { tipo: 'quitar_sancion', reserva: { sancionId: p.sancionId, solicitante: p.solicitante, identificacion: p.identificacion } }
+                : { tipo: 'quitar_penalizacion', reserva: { id: p.reservaId, solicitante: p.solicitante, identificacion: p.identificacion } }
+            )
+          }
         />
       ) : null}
 
@@ -536,7 +708,25 @@ export default function ReservasPage() {
           ))}
         </GrupoDeAtencion>
 
-        <GrupoDeAtencion titulo="Esperando a que llegue" color="bg-amber-400" cantidad={deHoy.esperando.length} vacio="Nadie por llegar con la hora ya empezada.">
+        <GrupoDeAtencion
+          titulo="Esperando a que llegue"
+          color="bg-amber-400"
+          cantidad={deHoy.esperando.length}
+          vacio="Nadie por llegar con la hora ya empezada."
+          accion={
+            deHoy.esperando.length > 0 ? (
+              <button
+                type="button"
+                disabled={trabajando}
+                onClick={() => setConfirmacion({ tipo: 'liberar_todos', reserva: { cantidad: deHoy.esperando.length } })}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 transition-colors hover:border-amber-500 disabled:opacity-60"
+              >
+                <DoorOpen size={14} aria-hidden="true" />
+                Liberar a los que no llegaron ({deHoy.esperando.length})
+              </button>
+            ) : null
+          }
+        >
           {deHoy.esperando.map(({ reserva, situacion }) => (
             <FilaDeAtencion
               key={reserva.id}
@@ -562,7 +752,7 @@ export default function ReservasPage() {
         {deHoy.por_llegar.length > MAXIMO_POR_LLEGAR ? <p className="text-xs text-slate-500">y {deHoy.por_llegar.length - MAXIMO_POR_LLEGAR} más en la tabla de abajo</p> : null}
       </section>
 
-      <section className="flex flex-col gap-3" aria-label="Todas las reservas">
+      <section ref={tabla} className="flex scroll-mt-20 flex-col gap-3" aria-label="Todas las reservas">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-bold text-slate-900">Reservas</h2>
           <div className="inline-flex rounded-lg border border-border bg-white p-0.5" role="group" aria-label="Qué días mostrar">
@@ -678,6 +868,21 @@ export default function ReservasPage() {
       >
         {confirmacion ? <ContenidoDeConfirmacion tipo={confirmacion.tipo} reserva={confirmacion.reserva} reloj={reloj} /> : null}
       </ModalConfirmar>
+      {sancionando ? (
+        <ModalDeSancion
+          persona={sancionando}
+          onCerrar={() => setSancionando(null)}
+          onHecho={(sancion) => {
+            setSancionando(null);
+            setAviso(
+              `Sanción registrada: ${sancion.solicitante} no puede reservar hasta el ${momento(sancion.hasta)}${
+                sancion.canceladas.length > 0 ? ` (se cancelaron ${sancion.canceladas.join(', ')})` : ''
+              }.`
+            );
+            cargar();
+          }}
+        />
+      ) : null}
       {boleta.portal}
     </PaginaAdmin>
   );

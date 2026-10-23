@@ -5,7 +5,7 @@ import EnlaceExterno from './EnlaceExterno';
 import MarcaBiblioteca from './MarcaBiblioteca';
 import Redes from './Redes';
 import { LIBRARY } from '../config/library';
-import { SERVICIOS } from '../config/navegacion';
+import { useServicios } from '../config/useServicios';
 
 // El panel del personal es otra parte del sistema y no se enlaza desde el sitio público.
 const ENLACE = 'text-white/75 transition-colors hover:text-white hover:underline underline-offset-2';
@@ -13,6 +13,7 @@ const ENLACE = 'text-white/75 transition-colors hover:text-white hover:underline
 // Pie de página: quién es la biblioteca (con sus redes), los servicios y dónde encontrarla. En un kiosco no se muestran las
 // redes ni el enlace al mapa (llevarían fuera del sistema), pero sí la dirección.
 export default function SiteFooter() {
+  const { servicios } = useServicios();
   return (
     <footer className="mt-auto border-t-4 border-t-action bg-ink text-white print:hidden">
       <Container className="grid gap-10 py-12 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1.3fr]">
@@ -31,7 +32,7 @@ export default function SiteFooter() {
         <nav aria-label="Servicios de la biblioteca">
           <h2 className="text-sm font-bold uppercase tracking-wider text-blue-300">Servicios</h2>
           <ul className="mt-4 flex flex-col gap-2.5 text-sm">
-            {SERVICIOS.map((s) => (
+            {servicios.map((s) => (
               <li key={s.clave}>
                 <Link to={s.to} className={ENLACE}>
                   {s.tituloCorto}

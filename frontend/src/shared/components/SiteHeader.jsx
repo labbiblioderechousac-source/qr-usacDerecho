@@ -5,7 +5,7 @@ import Container from './Container';
 import MarcaBiblioteca from './MarcaBiblioteca';
 import Redes from './Redes';
 import { LIBRARY } from '../config/library';
-import { MENU } from '../config/navegacion';
+import { useServicios } from '../config/useServicios';
 import { useKiosco } from '../kiosco/KioscoContext';
 
 const ENLACE_BASE = 'relative whitespace-nowrap rounded-md px-4 py-2.5 text-base font-semibold transition-colors';
@@ -15,6 +15,7 @@ const enlaceDeMenu = ({ isActive }) =>
 export default function SiteHeader() {
   const { pathname } = useLocation();
   const { kiosco, esKiosco } = useKiosco();
+  const { menu } = useServicios();
   const [menuMovil, setMenuMovil] = useState(false);
   const [conSombra, setConSombra] = useState(false);
 
@@ -61,7 +62,7 @@ export default function SiteHeader() {
           </Link>
 
           <nav aria-label="Menú principal" className="hidden items-center gap-1 md:flex">
-            {MENU.map((item) => (
+            {menu.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.exacto} className={enlaceDeMenu}>
                 {item.etiqueta}
               </NavLink>
@@ -89,7 +90,7 @@ export default function SiteHeader() {
         {menuMovil ? (
           <nav id="menu-movil" aria-label="Menú principal" className="entrar border-t border-border bg-white md:hidden">
             <Container className="flex flex-col gap-1 py-3">
-              {MENU.map((item) => (
+              {menu.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

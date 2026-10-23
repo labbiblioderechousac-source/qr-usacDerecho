@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { Check, Send } from 'lucide-react';
 import { solvenciaApi } from './solvenciaApi';
 import CampoDeFoto from './CampoDeFoto';
@@ -11,6 +12,7 @@ import Nota from '../../shared/components/Nota';
 import Page from '../../shared/components/Page';
 import { Checkbox, Input, Select } from '../../shared/components/FormField';
 import { LIBRARY } from '../../shared/config/library';
+import { useSolvenciaDisponible } from '../../shared/config/useServicios';
 import { diaDeLaSemana, fechaLarga, hoyISO, sumarDias } from '../../shared/utils/fechas';
 import { correoValido, hayErrores, soloDigitos, textoEntre } from '../../shared/utils/validaciones';
 
@@ -108,6 +110,7 @@ function validar(form, diasMaximos, fotos, fotosObligatorias) {
 
 export default function SolvenciaPage() {
   const { kiosco } = useKiosco();
+  const { disponible } = useSolvenciaDisponible();
   const [reglas, setReglas] = useState(null);
   const [form, setForm] = useState(CAMPOS_INICIALES);
   const [fotos, setFotos] = useState(SIN_FOTOS);
@@ -173,6 +176,9 @@ export default function SolvenciaPage() {
     }
   }
 
+  // Donde la administración quitó el formulario (en la web o en el kiosco), se muestran los pasos para pedirla.
+  if (!disponible) return <Navigate to="/solvencia/pasos" replace />;
+
   return (
     <Page
       crumbs={[{ etiqueta: 'Inicio', to: '/' }, { etiqueta: 'Solicitud de solvencia' }]}
@@ -194,7 +200,11 @@ export default function SolvenciaPage() {
           >
             <Nota tono="aviso" titulo="Solo para estudiantes de la Facultad">
               El servicio de solvencias aplica únicamente a estudiantes de la {LIBRARY.facultad} del Campus Central. Ten a la mano tu carné, tu DPI y el
-              número de tu orden de pago ya pagada.
+              número de tu orden de pago ya pagada.{' '}
+              <Link to="/solvencia/pasos" className="font-semibold underline">
+                ¿Es tu primera vez? Mira los pasos y los videos
+              </Link>
+              .
             </Nota>
 
             <AlertBanner>{error}</AlertBanner>

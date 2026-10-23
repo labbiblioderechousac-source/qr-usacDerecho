@@ -17,4 +17,11 @@ export const reservasApi = {
   // Quién no puede reservar por no haberse presentado, y quitarle la penalización.
   penalizaciones: () => axiosClient.get('/reservas/penalizaciones'),
   quitarPenalizacion: (id) => axiosClient.patch(`/reservas/item/${id}/quitar-penalizacion`),
+  // Sanciones que pone el personal a mano: { identificacion, horas, motivo, reservaId? }; el historial de todas, y quitarlas.
+  sancionar: (datos) => axiosClient.post('/reservas/sanciones', datos),
+  sanciones: () => axiosClient.get('/reservas/sanciones'),
+  quitarSancion: (id) => axiosClient.patch(`/reservas/sanciones/${id}/quitar`),
+  // Libera de una vez a quienes no llegaron y ya pasó su hora de inicio (con la penalización por no presentarse).
+  liberarNoLlegaron: () => axiosClient.post('/reservas/liberar-no-llegaron', {}),
+  resumen: () => axiosClient.get('/reservas/resumen'),
 };

@@ -38,6 +38,7 @@ export const router = createBrowserRouter([
           { path: '/tesis/:id/documento', ...pagina(() => import('../features/catalog/ThesisDocumentPage')) },
           { path: '/sala-de-estudio', ...pagina(() => import('../features/reservas/StudyRoomPage')) },
           { path: '/solvencia', ...pagina(() => import('../features/solvencia/SolvenciaPage')) },
+          { path: '/solvencia/pasos', ...pagina(() => import('../features/solvencia/PasosDeSolvenciaPage')) },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

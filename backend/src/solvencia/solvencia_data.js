@@ -4,6 +4,7 @@ const { generarCodigoConfirmacion, correoValido } = require('../../utils/codigos
 const { esFechaISO, fechaLocal, minutosDelDia, sumarDias } = require('../../utils/fechas');
 const horarios = require('../horarios/horarios_data');
 const fotosData = require('./fotos_data');
+const configuracion = require('../configuracion/configuracion_data');
 
 // Solvencias de biblioteca (paz y salvo). Siguen el proceso que la biblioteca publica en su sitio: la persona genera la
 // orden de pago en SIIF, la paga en el banco, llena la solicitud con sus datos y el número de esa orden, y sube la foto del
@@ -112,8 +113,16 @@ function validar({ solicitante, identificacion, cui, programa, motivo, correo, o
 // Crea la solicitud. Desde la web las dos fotos son obligatorias; desde un kiosco (sin cámara) pueden faltar: el personal revisa los
 // papeles en el mostrador. Las fotos se guardan antes que la solicitud: si no se pudieran guardar, la solicitud no se registra.
 async function crear(datos, ahora = new Date()) {
-  const limpios = validar(datos, ahora);
   const kiosco = kioscoValido(datos.kiosco);
+  // La administración puede quitar el formulario de la web o de los kioscos (Configuración).
+  const disponible = configuracion.solvenciaDisponible();
+  if (kiosco && !disponible.kiosco) {
+    throw rechazo('La solicitud de solvencia no está disponible en el kiosco: hazla desde tu celular o tu computadora', 403);
+  }
+  if (!kiosco && !disponible.web) {
+    throw rechazo('La solicitud de solvencia está pausada por el momento. Consulta en el mostrador de la biblioteca', 403);
+  }
+  const limpios = validar(datos, ahora);
   const fotos = fotosData.leerFotos(datos.fotos, { obligatorias: !kiosco });
   const id = siguienteCodigo();
   const subidaEn = ahora.toISOString();

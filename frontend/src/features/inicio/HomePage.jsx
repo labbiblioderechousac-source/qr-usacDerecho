@@ -4,7 +4,7 @@ import Container from '../../shared/components/Container';
 import HeroSearch from '../../shared/components/HeroSearch';
 import ServiceCard from '../../shared/components/ServiceCard';
 import { LIBRARY } from '../../shared/config/library';
-import { SERVICIOS } from '../../shared/config/navegacion';
+import { useServicios } from '../../shared/config/useServicios';
 import { useTitulo } from '../../shared/hooks/useTitulo';
 import HorariosYUbicacion from './HorariosYUbicacion';
 
@@ -20,6 +20,7 @@ const ATAJOS = [
 // Debajo, los horarios de reserva y dónde está la biblioteca.
 export default function HomePage() {
   useTitulo(null);
+  const { servicios } = useServicios();
 
   return (
     <>
@@ -60,7 +61,7 @@ export default function HomePage() {
             ¿Qué quieres hacer?
           </h2>
           <ul className="mt-8 grid gap-6 md:grid-cols-3">
-            {SERVICIOS.map((s) => (
+            {servicios.map((s) => (
               <li key={s.clave}>
                 <ServiceCard to={s.to} icono={s.icono} titulo={s.titulo} accion={s.accion} acento={s.acento}>
                   {s.resumen}

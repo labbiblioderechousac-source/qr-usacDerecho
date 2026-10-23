@@ -8,6 +8,15 @@ import AlertBanner from '../../../shared/components/AlertBanner';
 import Badge from '../../../shared/components/Badge';
 import Button from '../../../shared/components/Button';
 
+const CANALES_DE_SOLVENCIA = [
+  { canal: 'web', nombre: 'En la web', detalle: 'Desde el celular o la computadora de cada estudiante (puede tomar las fotos del pago).' },
+  {
+    canal: 'kiosco',
+    nombre: 'En los kioscos',
+    detalle: 'En la pantalla de la entrada no hay cámara: si la apagas, el kiosco muestra los pasos y un código QR para hacerla desde el celular.',
+  },
+];
+
 const SERVICIOS = [
   { tipo: 'cubiculo', nombre: 'Cubículos', detalle: 'Reservas por horas para estudiar o trabajar en grupo.' },
   { tipo: 'estacion', nombre: 'Estaciones', detalle: 'Puestos individuales con una sola silla.' },
@@ -25,6 +34,7 @@ export default function ConfiguracionPage() {
   const [pausadas, setPausadas] = useState({});
   const [importantes, setImportantes] = useState([]);
   const [inactividad, setInactividad] = useState({});
+  const [solvencia, setSolvencia] = useState({});
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +49,7 @@ export default function ConfiguracionPage() {
     setPausadas(configuracion.reservasPausadas);
     setImportantes(configuracion.camposImportantes);
     setInactividad(configuracion.minutosDeInactividad);
+    setSolvencia(configuracion.solvenciaDisponible);
   }
 
   useEffect(() => {
@@ -70,7 +81,8 @@ export default function ConfiguracionPage() {
     Number(horasPorDia) !== guardada.maxHorasPorDia ||
     SERVICIOS.some(({ tipo }) => pausadas[tipo] !== guardada.reservasPausadas[tipo]) ||
     guardada.camposDeTesis.some(({ campo }) => importantes.includes(campo) !== guardada.camposImportantes.includes(campo)) ||
-    Object.keys(ROLES_DEL_PERSONAL).some((rol) => inactividad[rol] !== guardada.minutosDeInactividad[rol]);
+    Object.keys(ROLES_DEL_PERSONAL).some((rol) => inactividad[rol] !== guardada.minutosDeInactividad[rol]) ||
+    CANALES_DE_SOLVENCIA.some(({ canal }) => solvencia[canal] !== guardada.solvenciaDisponible[canal]);
 
   async function guardar(e) {
     e.preventDefault();
@@ -107,6 +119,7 @@ export default function ConfiguracionPage() {
         reservasPausadas: pausadas,
         camposImportantes: guardada.camposDeTesis.map(({ campo }) => campo).filter((campo) => importantes.includes(campo)),
         minutosDeInactividad: inactividad,
+        solvenciaDisponible: solvencia,
       });
       cargarEnFormulario(res.data.data);
       setAviso('Configuración guardada. Ya rige en los kioscos y en la web.');
@@ -258,6 +271,35 @@ export default function ConfiguracionPage() {
                     className="h-4 w-4 accent-primary"
                   />
                   Importante
+                </label>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="flex flex-col gap-3 rounded-xl border border-border bg-white p-5" aria-labelledby="solicitud-de-solvencia">
+          <h2 id="solicitud-de-solvencia" className="text-base font-bold text-slate-900">
+            Solicitud de solvencia
+          </h2>
+          <p className="text-sm text-slate-600">
+            Dónde aparece la opción del formulario de solvencia en el menú y en el inicio. Donde la apagues, en su lugar queda «Cómo pedir tu
+            solvencia»: los pasos, los videos de la biblioteca y, en el kiosco, un código QR para hacerla desde el celular.
+          </p>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {CANALES_DE_SOLVENCIA.map(({ canal, nombre, detalle }) => (
+              <li key={canal} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-slate-900">{nombre}</span>
+                  <span className="block text-xs text-slate-500">{detalle}</span>
+                </span>
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={solvencia[canal] !== false}
+                    onChange={(e) => setSolvencia((previo) => ({ ...previo, [canal]: e.target.checked }))}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  {solvencia[canal] !== false ? 'Activada' : 'Apagada'}
                 </label>
               </li>
             ))}

@@ -10,6 +10,10 @@ const {
   cuandoSePenalice,
   penalizaciones,
   quitarPenalizacion,
+  sancionar,
+  quitarSancion,
+  listarSanciones,
+  liberarNoLlegaron,
 } = require('./reservas_data');
 const { CONDICIONES } = require('./recursos_data');
 const configuracion = require('../configuracion/configuracion_data');
@@ -146,6 +150,45 @@ function patchQuitarPenalizacion(req, res) {
   }
 }
 
+// Sanción a mano: la persona queda unas horas sin poder reservar; si dejó correo en alguna reserva, se le avisa con el motivo.
+function postSancion(req, res) {
+  try {
+    const { sancion, canceladas } = sancionar(req.body, req.sesion);
+    registrar(
+      req.sesion,
+      'reserva.sancionada',
+      `${sancion.id} (${sancion.identificacion}): ${sancion.horas} h sin reservar · ${sancion.motivo}${canceladas.length > 0 ? `; canceladas ${canceladas.map((c) => c.id).join(', ')}` : ''}`
+    );
+    notificaciones.sancionPuesta({ sancion, canceladas });
+    return ok(res, { ...sancion, canceladas: canceladas.map((c) => c.id) }, 'Sanción registrada');
+  } catch (err) {
+    return fail(res, err.message, err.estado || 500);
+  }
+}
+
+function patchQuitarSancion(req, res) {
+  try {
+    const sancion = quitarSancion(req.params.id, req.sesion);
+    if (!sancion) return notFound(res, 'Sanción no encontrada');
+    registrar(req.sesion, 'reserva.sancion_quitada', `${sancion.id} (${sancion.identificacion})`);
+    return ok(res, sancion, 'Sanción quitada: ya puede reservar');
+  } catch (err) {
+    return fail(res, err.message, err.estado || 500);
+  }
+}
+
+function getSanciones(req, res) {
+  return ok(res, listarSanciones());
+}
+
+function postLiberarNoLlegaron(req, res) {
+  const liberadas = liberarNoLlegaron();
+  if (liberadas.length > 0) {
+    registrar(req.sesion, 'reserva.liberadas_no_llegaron', liberadas.map((r) => `${r.id} (${r.recursoNombre})`).join(', '));
+  }
+  return ok(res, liberadas, liberadas.length > 0 ? `${liberadas.length} lugares liberados` : 'No había nadie por liberar');
+}
+
 function getResumen(req, res) {
   return ok(res, resumen());
 }
@@ -160,5 +203,9 @@ module.exports = {
   patchLiberar,
   getPenalizaciones,
   patchQuitarPenalizacion,
+  postSancion,
+  patchQuitarSancion,
+  getSanciones,
+  postLiberarNoLlegaron,
   getResumen,
 };

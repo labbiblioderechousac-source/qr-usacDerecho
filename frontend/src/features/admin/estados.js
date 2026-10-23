@@ -45,6 +45,9 @@ export const ACCIONES_DE_ACTIVIDAD = {
   'reserva.salida_anticipada': 'Registró una salida antes de tiempo',
   'reserva.penalizada': 'Penalizó a alguien por no presentarse',
   'reserva.penalizacion_quitada': 'Quitó una penalización por no presentarse',
+  'reserva.sancionada': 'Sancionó a alguien en el servicio de reservas',
+  'reserva.sancion_quitada': 'Quitó una sanción de reservas',
+  'reserva.liberadas_no_llegaron': 'Liberó los lugares de quienes no llegaron',
   'solicitud.avanzada': 'Avanzó una solicitud de solvencia',
   'solicitud.aprobada': 'Aprobó una solicitud de solvencia',
   'solicitud.rechazada': 'Rechazó una solicitud de solvencia',
@@ -80,6 +83,7 @@ export const TIPO_DE_CORREO = {
   comprobante: 'Comprobante a pedido',
   reserva_cancelada: 'Reserva cancelada',
   reserva_liberada: 'Reserva liberada',
+  reserva_sancion: 'Sanción en reservas',
   prueba: 'Correo de prueba',
   respaldo: 'Respaldo de los datos',
 };

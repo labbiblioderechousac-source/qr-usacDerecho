@@ -344,6 +344,20 @@ llega un aviso. En **Reservas** aparece la lista «Sin poder reservar por no pre
 ejemplo, si avisó y no se registró el aviso), y al buscar su carné se ve el aviso. Si el personal libera la reserva a mano con
 **No llegó** (avisó que no vendría), no hay penalización. Las horas se cambian en **Configuración** (0 la apaga).
 
+**Más herramientas del mostrador:**
+
+- **Sancionar** (en cada reserva, o desde el historial de un carné): la persona queda sin poder reservar el tiempo elegido (de 2 horas a
+  una semana) por el motivo que se escriba (hay motivos frecuentes para elegir). Sus reservas de ese tiempo se cancelan y, si dejó correo,
+  le llega el aviso. Aparece en «Sin poder reservar» junto a quienes no llegaron, y se puede quitar.
+- **Liberar a los que no llegaron**: en «Esperando a que llegue», libera de una vez los lugares de quienes ya pasaron su hora de inicio, sin
+  esperar a que termine la tolerancia. Es lo mismo que haría el sistema al vencer la tolerancia (con la penalización por no presentarse);
+  para liberar sin castigo a quien avisó, está «No llegó».
+- **Historial del carné**: al buscar un carné se ven cuántas veces reservó, las que usó, a cuántas no llegó, las canceladas y sus
+  sanciones (vigentes, terminadas o quitadas, con quién las puso).
+- **Avisos cuando se libera un lugar**: con el panel abierto, la PC dice en voz alta «Se liberó la Estación 4: Ana Pérez no llegó a su
+  reserva» y muestra una notificación (cada PC elige si quiere voz y notificación).
+- Las tarjetas de ocupación de arriba muestran cuántos lugares quedan libres y, con un clic, filtran la tabla por ese tipo de lugar.
+
 **Plano y boleta de uso.** Cada reserva de la tabla muestra un plano pequeño de la sala con su lugar marcado en rojo. Arriba, en
 **Boleta de uso: buscar por carné**, el personal escribe el carné del estudiante que llega, ve sus reservas con el plano y pulsa
 **Imprimir boleta**. La boleta es la misma hoja que la biblioteca usa en papel, con el nombre, el carné, el lugar, la fecha y el horario
@@ -382,6 +396,15 @@ C:\solvencias\
 Los archivos se nombran con nombre + carné + fecha de subida, sin tildes ni ñ (si ya existe uno igual, se agrega `_2`). En la solicitud
 quedan para siempre el nombre del archivo, dónde se guardó, la fecha de subida y el **hash** de cada foto: si alguien vuelve a subir el
 mismo comprobante, el panel lo marca como **Repetida** y dice en qué solicitud se usó.
+
+**Cómo pedir tu solvencia** (`/solvencia/pasos`): los 6 pasos que la biblioteca publica en su sitio (orden de pago en SIIF, pago en el
+banco, verificar el número y el detalle, formulario con fotos, confirmación por correo y solvencia en PDF), los horarios de entrega y los
+dos videos de la biblioteca (*Solvencias Final 2022* y *Tutorial Solicitud de Solvencias*). El formulario la enlaza para quien lo hace por
+primera vez. En el kiosco, además, muestra un código QR que abre el formulario en el celular, donde sí se pueden tomar las fotos.
+
+**Dónde se puede pedir.** En **Configuración → Solicitud de solvencia** hay un interruptor para la web y otro para los kioscos. Donde se
+apague, desaparece la opción del formulario del menú y del inicio, en su lugar queda «Cómo pedir tu solvencia», y el servidor rechaza las
+solicitudes que lleguen desde ahí. Útil para el kiosco de la entrada, que no tiene cámara.
 
 **Revisión (solo administración).** En **Solvencias**, **Revisar** abre la solicitud con las dos fotos en miniatura (un clic las amplía),
 una lista de lo que hay que comprobar (que se lean, que el detalle diga *Solvencia de Biblioteca*, que el número de orden coincida con la
