@@ -5,6 +5,7 @@ import { usePaginaLocal } from '../usePaginaLocal';
 import { useSesionAdmin } from '../SesionAdmin';
 import { EVENTO_SOLVENCIA_NUEVA } from '../useAvisosDeSolvencia';
 import AvisosDeEstaPc from '../componentes/AvisosDeEstaPc';
+import InterruptorDeSolvencia from '../componentes/InterruptorDeSolvencia';
 import { elegirCarpeta, estadoDeLaCarpeta, guardarEnLaPc, pedirPermiso } from '../carpetaDeSolvencias';
 import { getErrorMessage } from '../../../shared/api/axiosClient';
 import AlertBanner from '../../../shared/components/AlertBanner';
@@ -408,6 +409,8 @@ export default function SolicitudesPage() {
           {aviso}
         </p>
       ) : null}
+
+      {esAdministrador ? <InterruptorDeSolvencia /> : null}
 
       {esAdministrador ? (
         <div className="grid gap-3 xl:grid-cols-2">

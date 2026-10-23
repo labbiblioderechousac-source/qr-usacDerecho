@@ -35,17 +35,18 @@ export const SERVICIOS = [
   },
 ];
 
-// Donde la administración quitó el formulario de solvencia (Configuración: en la web o en los kioscos), la opción lleva a los pasos
-// para pedirla, con los videos de la biblioteca y, en el kiosco, un código QR para hacerla desde el celular (ver useServicios).
+// Cómo hacer la solvencia: los pasos, el video de la biblioteca y, en el kiosco, un código QR para hacerla desde el celular. Va siempre al
+// lado de la solicitud; donde la administración quitó el formulario (Configuración: en la web o en los kioscos), queda solo esta opción
+// (ver useServicios).
 export const PASOS_DE_SOLVENCIA = {
   clave: 'solvencia',
   to: '/solvencia/pasos',
-  titulo: 'Cómo pedir tu solvencia',
-  tituloCorto: 'Solvencia',
+  titulo: 'Cómo hacer tu solvencia',
+  tituloCorto: 'Cómo hacer la solvencia',
   icono: ListChecks,
   acento: 'red',
-  accion: 'Ver los pasos',
-  resumen: 'Los pasos, los videos de la biblioteca y un código para hacer tu solicitud desde el celular.',
+  accion: 'Ver cómo',
+  resumen: 'Los pasos y el video de la biblioteca: genera tu orden, paga, verifica y envía la solicitud con las fotos.',
 };
 
 // Menú principal del sitio.

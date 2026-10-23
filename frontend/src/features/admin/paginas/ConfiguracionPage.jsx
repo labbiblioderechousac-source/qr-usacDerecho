@@ -282,8 +282,9 @@ export default function ConfiguracionPage() {
             Solicitud de solvencia
           </h2>
           <p className="text-sm text-slate-600">
-            Dónde aparece la opción del formulario de solvencia en el menú y en el inicio. Donde la apagues, en su lugar queda «Cómo pedir tu
-            solvencia»: los pasos, los videos de la biblioteca y, en el kiosco, un código QR para hacerla desde el celular.
+            Dónde aparece la opción del formulario de solvencia en el menú y en el inicio (también se cambia arriba en la sección Solvencias). Donde
+            la apagues, queda solo «Cómo hacer tu solvencia»: los pasos, el video de la biblioteca y, en el kiosco, un código QR para hacerla desde
+            el celular.
           </p>
           <ul className="divide-y divide-border rounded-lg border border-border">
             {CANALES_DE_SOLVENCIA.map(({ canal, nombre, detalle }) => (

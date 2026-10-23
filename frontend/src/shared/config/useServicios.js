@@ -39,12 +39,13 @@ export function useSolvenciaDisponible() {
   return { disponible, reglas };
 }
 
-// Las opciones del inicio, del menú y del pie. Donde el formulario de solvencia no está disponible, su opción lleva a los pasos.
+// Las opciones del inicio, del menú y del pie. «Cómo hacer tu solvencia» va siempre al lado de la solicitud; donde el formulario no está
+// disponible, queda solo esa opción (la de la solicitud desaparece).
 export function useServicios() {
   const { disponible } = useSolvenciaDisponible();
-  if (disponible) return { servicios: SERVICIOS, menu: MENU };
-  return {
-    servicios: SERVICIOS.map((s) => (s.clave === 'solvencia' ? PASOS_DE_SOLVENCIA : s)),
-    menu: MENU.map((m) => (m.to === '/solvencia' ? { ...m, to: PASOS_DE_SOLVENCIA.to } : m)),
-  };
+  const servicios = SERVICIOS.flatMap((s) => (s.clave !== 'solvencia' ? [s] : disponible ? [s, { ...PASOS_DE_SOLVENCIA, clave: 'pasos_solvencia' }] : [PASOS_DE_SOLVENCIA]));
+  const menu = MENU.flatMap((m) =>
+    m.to !== '/solvencia' ? [m] : disponible ? [m, { to: PASOS_DE_SOLVENCIA.to, etiqueta: '¿Cómo hacerla?' }] : [{ ...m, to: PASOS_DE_SOLVENCIA.to }]
+  );
+  return { servicios, menu };
 }

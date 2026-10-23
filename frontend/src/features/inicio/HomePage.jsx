@@ -60,7 +60,7 @@ export default function HomePage() {
           <h2 id="servicios-titulo" className="text-center font-display text-3xl font-semibold text-slate-900">
             ¿Qué quieres hacer?
           </h2>
-          <ul className="mt-8 grid gap-6 md:grid-cols-3">
+          <ul className={`mt-8 grid gap-6 ${servicios.length === 4 ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'}`}>
             {servicios.map((s) => (
               <li key={s.clave}>
                 <ServiceCard to={s.to} icono={s.icono} titulo={s.titulo} accion={s.accion} acento={s.acento}>

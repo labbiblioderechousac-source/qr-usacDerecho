@@ -100,9 +100,9 @@ export default function PasosDeSolvenciaPage() {
 
   return (
     <Page
-      crumbs={[{ etiqueta: 'Inicio', to: '/' }, { etiqueta: 'Cómo pedir tu solvencia' }]}
-      title="Cómo pedir tu solvencia"
-      subtitle="Paz y salvo bibliotecario: los pasos, los horarios de entrega y los videos de la biblioteca."
+      crumbs={[{ etiqueta: 'Inicio', to: '/' }, { etiqueta: 'Cómo hacer tu solvencia' }]}
+      title="Cómo hacer tu solvencia"
+      subtitle="Paz y salvo bibliotecario: el video de la biblioteca, los pasos y cuándo llega tu solvencia."
       ancho="formulario"
     >
       <div className="flex flex-col gap-8">
@@ -115,6 +115,10 @@ export default function PasosDeSolvenciaPage() {
         ) : null}
 
         {kiosco ? <CodigoParaElCelular direccion={direccionDelFormulario} /> : null}
+
+        <section aria-label="Video de la biblioteca" className="flex flex-col gap-2">
+          <Video {...VIDEOS[0]} />
+        </section>
 
         <Nota tono="info" titulo="Antes de empezar">
           El servicio es solo para estudiantes de la {LIBRARY.facultad} del Campus Central. Envía tu solicitud con al menos 24 horas y como máximo 7
@@ -175,15 +179,11 @@ export default function PasosDeSolvenciaPage() {
         <section aria-labelledby="videos-titulo" className="flex flex-col gap-4">
           <div>
             <h2 id="videos-titulo" className="font-display text-2xl font-semibold text-slate-900">
-              Videos de la biblioteca
+              Tutorial paso a paso
             </h2>
-            <p className="mt-1 text-slate-700">Los mismos que la biblioteca publica en su página de Solvencias, con estos pasos.</p>
+            <p className="mt-1 text-slate-700">El tutorial que la biblioteca publica en su página de Solvencias, junto a estos pasos.</p>
           </div>
-          <div className="grid gap-6 md:grid-cols-2">
-            {VIDEOS.map((video) => (
-              <Video key={video.id} {...video} />
-            ))}
-          </div>
+          <Video {...VIDEOS[1]} />
         </section>
 
         {disponible ? (

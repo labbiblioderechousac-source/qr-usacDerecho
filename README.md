@@ -397,13 +397,15 @@ Los archivos se nombran con nombre + carné + fecha de subida, sin tildes ni ñ 
 quedan para siempre el nombre del archivo, dónde se guardó, la fecha de subida y el **hash** de cada foto: si alguien vuelve a subir el
 mismo comprobante, el panel lo marca como **Repetida** y dice en qué solicitud se usó.
 
-**Cómo pedir tu solvencia** (`/solvencia/pasos`): los 6 pasos que la biblioteca publica en su sitio (orden de pago en SIIF, pago en el
+**Cómo hacer tu solvencia** (`/solvencia/pasos`, en el menú «¿Cómo hacerla?», siempre al lado de la solicitud): arriba el video de la
+biblioteca, luego los 6 pasos que la biblioteca publica en su sitio (orden de pago en SIIF, pago en el
 banco, verificar el número y el detalle, formulario con fotos, confirmación por correo y solvencia en PDF), los horarios de entrega y los
 dos videos de la biblioteca (*Solvencias Final 2022* y *Tutorial Solicitud de Solvencias*). El formulario la enlaza para quien lo hace por
 primera vez. En el kiosco, además, muestra un código QR que abre el formulario en el celular, donde sí se pueden tomar las fotos.
 
-**Dónde se puede pedir.** En **Configuración → Solicitud de solvencia** hay un interruptor para la web y otro para los kioscos. Donde se
-apague, desaparece la opción del formulario del menú y del inicio, en su lugar queda «Cómo pedir tu solvencia», y el servidor rechaza las
+**Habilitar o deshabilitar el trámite.** Arriba de la sección **Solvencias** del panel (y también en **Configuración → Solicitud de
+solvencia**) hay un interruptor para la web y otro para los kioscos. Donde se
+apague, desaparece la opción del formulario del menú y del inicio, queda solo «Cómo hacer tu solvencia», y el servidor rechaza las
 solicitudes que lleguen desde ahí. Útil para el kiosco de la entrada, que no tiene cámara.
 
 **Revisión (solo administración).** En **Solvencias**, **Revisar** abre la solicitud con las dos fotos en miniatura (un clic las amplía),
@@ -477,7 +479,9 @@ cuántas se atendieron, cuántas personas no se presentaron, cuántas se cancela
 porcentaje de quienes reservaron llegó. La API es `GET /api/admin/estadisticas?desde=2026-10-01&hasta=2026-10-31` (sin fechas, todo).
 
 **Descargar Excel.** El botón **Descargar Excel** de Estadísticas arma un libro (.xlsx) del mismo período que se ve en pantalla, con estas
-hojas: **Resumen**; **Por día** (una fila por cada día del período —del 1 al 30 o 31 si es un mes— con búsquedas en el catálogo, consultas
+hojas: **Resumen**; **Por jornada** (el formato de la biblioteca: un día por fila y, una al lado de la otra, la jornada matutina JM, hasta
+las 12:59, y la vespertina JV, desde las 13:00, cada una con cubículos, estaciones, sala de lectura, búsquedas del OPAC, tesis consultadas y
+escaneos de QR; si el período es un mes, la primera columna es el número del día); **Por día** (una fila por cada día del período —del 1 al 30 o 31 si es un mes— con búsquedas en el catálogo, consultas
 y descargas de tesis, escaneos de QR, usos de cubículos, estaciones y sala de lectura, horas reservadas, personas que no llegaron,
 solicitudes de solvencia y aprobadas, sesiones de kiosco y comprobantes impresos, con la fila Total); **Cubículos**, **Estaciones** y **Sala de
 lectura** (cuántas veces se usó cada lugar cada día: Cubículo 1 a 6, Estación 1 a 30, Mesa 1 a 5); **Tesis** (consultas, descargas y

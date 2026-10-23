@@ -136,6 +136,16 @@ const seUso = (r) => !['cancelado', 'liberada'].includes(r.estado);
 // "Mesa 1 · Silla 3" -> "Mesa 1": la sala de lectura se cuenta por mesa.
 const mesaDe = (recurso) => String(recurso.nombre).split('·')[0].trim();
 
+// Jornadas de la biblioteca: la matutina (JM) es la mañana, hasta la pausa del mediodía; la vespertina (JV), desde las 13:00. Una reserva
+// cuenta en la jornada de su hora de inicio (ninguna cruza la pausa); lo demás, en la de la hora en que ocurrió (hora de la biblioteca).
+const HORA_DE_LA_JORNADA_VESPERTINA = 13;
+const JORNADAS = [
+  { clave: 'jm', titulo: 'Jornada matutina (JM) · hasta las 12:59' },
+  { clave: 'jv', titulo: 'Jornada vespertina (JV) · desde las 13:00' },
+];
+const jornadaDeHora = (hora) => (Number(String(hora).slice(0, 2)) >= HORA_DE_LA_JORNADA_VESPERTINA ? 'jv' : 'jm');
+const jornadaDeMomento = (iso) => (new Date(iso).getHours() >= HORA_DE_LA_JORNADA_VESPERTINA ? 'jv' : 'jm');
+
 function nombreDelPeriodo(desde, hasta) {
   if (desde && hasta) return desde === hasta ? `del ${fechaLegible(desde)}` : `del ${fechaLegible(desde)} al ${fechaLegible(hasta)}`;
   if (desde) return `desde el ${fechaLegible(desde)}`;
@@ -168,10 +178,14 @@ function hojasDelExcel(filtro) {
     const fila = porDia.get(dia);
     if (fila) fila[clave] = (fila[clave] ?? 0) + cantidad;
   };
-  eventos.forEach((e) => sumar(diaDe(e), e.tipo));
+  eventos.forEach((e) => {
+    sumar(diaDe(e), e.tipo);
+    sumar(diaDe(e), `${e.tipo}_${jornadaDeMomento(e.creadoEn)}`);
+  });
   reservas.forEach((r) => {
     if (seUso(r)) {
       sumar(r.fecha, `uso_${r.tipo}`);
+      sumar(r.fecha, `uso_${r.tipo}_${jornadaDeHora(r.hora)}`);
       sumar(r.fecha, `lugar_${r.tipo === 'sala_lectura' ? mesaDe({ nombre: r.recursoNombre }) : r.recursoId}`);
       sumar(r.fecha, 'horas', Number(r.duracion) || 0);
     }
@@ -203,6 +217,39 @@ function hojasDelExcel(filtro) {
     ['sesion_kiosco', 'Sesiones de kiosco'],
     ['comprobante_impreso', 'Comprobantes impresos'],
   ];
+
+  // «Por jornada»: el formato de la biblioteca, con las columnas de cada jornada una al lado de la otra. Si el período cabe en un mes, la
+  // primera columna es el número del día (1, 2, ... 31); si no, la fecha completa.
+  const unSoloMes = dias.length > 0 && dias[0].slice(0, 7) === dias[dias.length - 1].slice(0, 7);
+  const deLaJornada = [
+    [(j) => `uso_cubiculo_${j}`, 'Cubículos'],
+    [(j) => `uso_estacion_${j}`, 'Estaciones'],
+    [(j) => `uso_sala_lectura_${j}`, 'Sala de lectura'],
+    [(j) => `busqueda_opac_${j}`, 'OPAC (búsquedas)'],
+    [(j) => [`consulta_digital_${j}`, `descarga_digital_${j}`], 'Tesis consultadas'],
+    [(j) => `acceso_qr_${j}`, 'Escaneos de QR'],
+  ];
+  const valorDe = (dia, claves) => [].concat(claves).reduce((suma, clave) => suma + (porDia.get(dia)[clave] ?? 0), 0);
+  const hojaPorJornada = {
+    nombre: 'Por jornada',
+    titulo: titulo('Uso por jornada'),
+    nota: 'Reservas por su hora de inicio; búsquedas, consultas y escaneos por la hora en que ocurrieron. Fines de semana sombreados.',
+    grupos: JORNADAS.map((j, i) => ({ titulo: j.titulo, desde: 2 + i * deLaJornada.length, hasta: 1 + (i + 1) * deLaJornada.length })),
+    columnas: [
+      { titulo: unSoloMes ? 'Día' : 'Fecha', ancho: unSoloMes ? 7 : 12 },
+      { titulo: 'Día de la semana', ancho: 11 },
+      ...JORNADAS.flatMap(() => deLaJornada.map(([, t]) => ({ titulo: t, ancho: 12 }))),
+    ],
+    filas: dias.map((dia) => ({
+      valores: [
+        unSoloMes ? Number(dia.slice(8, 10)) : fechaLegible(dia),
+        diaDeLaSemana(dia),
+        ...JORNADAS.flatMap((j) => deLaJornada.map(([clave]) => valorDe(dia, clave(j.clave)))),
+      ],
+      sombreada: esFinDeSemana(dia),
+    })),
+    totales: true,
+  };
 
   const hojaPorLugar = (nombre, columnas) => ({
     nombre,
@@ -254,6 +301,7 @@ function hojasDelExcel(filtro) {
         ['Comprobantes enviados por correo', comprobantes.porCorreo],
       ].map((valores) => ({ valores })),
     },
+    hojaPorJornada,
     {
       nombre: 'Por día',
       titulo: titulo('Uso de la biblioteca día por día'),

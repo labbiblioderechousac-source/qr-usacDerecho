@@ -101,7 +101,7 @@ try {
   ok(/filename="Estadisticas_2026-09-01_a_2026-09-30\.xlsx"/.test(r.headers.get('content-disposition') ?? ''), 'con el período en el nombre');
   const archivos = Object.fromEntries(leerZip(libro).map((a) => [a.nombre, a.contenido.toString('utf8')]));
   const hojas = [...archivos['xl/workbook.xml'].matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]);
-  ok(hojas.join() === 'Resumen,Por día,Cubículos,Estaciones,Sala de lectura,Tesis,Horas', `trae sus hojas (${hojas.join(', ')})`);
+  ok(hojas.join() === 'Resumen,Por jornada,Por día,Cubículos,Estaciones,Sala de lectura,Tesis,Horas', `trae sus hojas (${hojas.join(', ')})`);
   // Las celdas de una fila de una hoja, en orden: texto o número.
   const fila = (hoja, empiezaCon) => {
     const filas = [...archivos[`xl/worksheets/sheet${hoja}.xml`].matchAll(/<row r="\d+"[^>]*>(.*?)<\/row>/g)].map((m) =>
@@ -114,19 +114,28 @@ try {
     );
     return filas.find((f) => f[0] === empiezaCon) ?? null;
   };
-  const porDia = archivos['xl/worksheets/sheet2.xml'];
+  const porDia = archivos['xl/worksheets/sheet3.xml'];
   ok((porDia.match(/<t xml:space="preserve">\d\d\/09\/2026<\/t>/g) ?? []).length === 30, 'la hoja «Por día» tiene los 30 días de septiembre');
-  const el7 = fila(2, '07/09/2026');
+  const el7 = fila(3, '07/09/2026');
   ok(el7?.[1] === 'Lunes' && el7?.[2] === 2 && el7?.[7] === 1, `el 7 (lunes): 2 búsquedas y 1 estación usada (${JSON.stringify(el7)})`);
-  const el8 = fila(2, '08/09/2026');
+  const el8 = fila(3, '08/09/2026');
   ok(el8?.[10] === 1 && el8?.[13] === 1 && el8?.[7] === 0, `el 8: 1 no llegó, 1 sesión de kiosco, y la que no llegó no cuenta como uso (${JSON.stringify(el8)})`);
-  const total = fila(2, 'Total');
+  const total = fila(3, 'Total');
   ok(total?.[2] === 3 && /<f>SUM\(C5:C34\)<\/f>/.test(porDia), `la fila Total suma con fórmulas (${JSON.stringify(total?.slice(0, 4))})`);
-  ok(fila(2, '12/09/2026') && /<row r="16"[^>]*><c r="A16" s="4"/.test(porDia), 'los fines de semana van sombreados');
-  const cubiculos = fila(3, '14/09/2026');
+  ok(fila(3, '12/09/2026') && /<row r="16"[^>]*><c r="A16" s="4"/.test(porDia), 'los fines de semana van sombreados');
+  const cubiculos = fila(4, '14/09/2026');
   ok(cubiculos?.[3] === 1 && cubiculos?.[8] === 1, `el 14, el Cubículo 2 se usó 1 vez (${JSON.stringify(cubiculos)})`);
-  ok(fila(3, '08/09/2026')?.[2] === 0, 'la reserva cancelada del Cubículo 1 no cuenta');
-  ok(fila(6, 'T-2021-00045')?.[6] === 1, 'la hoja «Tesis» trae el escaneo de QR');
+  ok(fila(4, '08/09/2026')?.[2] === 0, 'la reserva cancelada del Cubículo 1 no cuenta');
+  ok(fila(7, 'T-2021-00045')?.[6] === 1, 'la hoja «Tesis» trae el escaneo de QR');
+  // Por jornada: JM hasta las 12:59 y JV desde las 13:00, cada una con cubículos, estaciones, sala, OPAC, tesis y QR.
+  const porJornada = archivos['xl/worksheets/sheet2.xml'];
+  ok(porJornada.includes('<mergeCell ref="C4:H4"/>') && porJornada.includes('<mergeCell ref="I4:N4"/>'), 'los encabezados JM y JV van combinados sobre sus columnas');
+  ok(porJornada.includes('Jornada matutina (JM)') && porJornada.includes('Jornada vespertina (JV)'), 'con sus nombres');
+  const j7 = fila(2, 7);
+  ok(j7?.[1] === 'Lunes' && j7?.[3] === 1 && j7?.[5] === 1 && j7?.[11] === 1, `el día 7: en JM 1 estación y 1 búsqueda; en JV la búsqueda de las 23:30 (${JSON.stringify(j7)})`);
+  const j14 = fila(2, 14);
+  ok(j14?.[2] === 0 && j14?.[8] === 1, `el día 14: el cubículo de las 14:00 cuenta en JV (${JSON.stringify(j14)})`);
+  ok((porJornada.match(/<row r="\d+"/g) ?? []).length === 4 + 1 + 30 + 1, 'título, nota, espacio, jornadas, encabezados, 30 días y el total');
   ok(!/2019R-00|Alguien/.test(Object.values(archivos).join('')), 'no lleva nombres ni carnés');
   const malo = await fetch(`${servidor.base}/api/admin/estadisticas/excel?desde=2026-13-01`, { headers: { Authorization: `Bearer ${token}` } });
   ok(malo.status === 400, `con una fecha imposible -> 400 (${malo.status})`);

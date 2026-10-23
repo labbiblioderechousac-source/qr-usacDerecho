@@ -4,9 +4,11 @@ const { crearZip } = require('./zip');
 // falta ninguna librería. Cubre lo que usan las estadísticas: varias hojas, un título, encabezados con color, números y textos, filas
 // sombreadas, una fila de totales con fórmulas SUMA, anchos de columna y la primera fila y columna fijas al desplazarse.
 //
-// `hojas`: [{ nombre, titulo?, nota?, columnas: [{ titulo, ancho? }], filas: [{ valores: [...], sombreada? }], totales? }]
+// `hojas`: [{ nombre, titulo?, nota?, grupos?, columnas: [{ titulo, ancho? }], filas: [{ valores: [...], sombreada? }], totales? }]
 //   - valores: número, texto o null (celda vacía).
 //   - totales: true agrega al final una fila «Total» que suma cada columna numérica.
+//   - grupos: [{ titulo, desde, hasta }] agrega encima de los encabezados una fila con el nombre de cada grupo de columnas (índices
+//     desde/hasta, incluidos), en una celda combinada: por ejemplo «Jornada matutina (JM)» sobre sus columnas.
 
 const ESTILO = { normal: 0, encabezado: 1, titulo: 2, total: 3, sombreada: 4, nota: 5 };
 
@@ -39,8 +41,9 @@ function celda(referencia, valor, estilo) {
 // Excel no acepta en el nombre de una hoja estos signos ni más de 31 caracteres.
 const nombreDeHoja = (nombre) => String(nombre).replace(/[[\]:*?/\\]/g, ' ').slice(0, 31);
 
-function hojaXml({ titulo, nota, columnas, filas, totales }) {
+function hojaXml({ titulo, nota, grupos = [], columnas, filas, totales }) {
   const renglones = [];
+  const combinadas = [];
   let numero = 0;
   const agregar = (celdas, alto) => {
     numero += 1;
@@ -50,6 +53,18 @@ function hojaXml({ titulo, nota, columnas, filas, totales }) {
   if (titulo) agregar((n) => celda(`A${n}`, titulo, ESTILO.titulo), 22);
   if (nota) agregar((n) => celda(`A${n}`, nota, ESTILO.nota));
   if (titulo || nota) agregar(() => '');
+  if (grupos.length > 0) {
+    agregar((n) => {
+      grupos.forEach((g) => combinadas.push(`${letraDeColumna(g.desde)}${n}:${letraDeColumna(g.hasta)}${n}`));
+      return columnas
+        .map((_, i) => {
+          const grupo = grupos.find((g) => g.desde === i);
+          const dentro = grupos.some((g) => i >= g.desde && i <= g.hasta);
+          return celda(`${letraDeColumna(i)}${n}`, grupo ? grupo.titulo : null, dentro ? ESTILO.encabezado : ESTILO.normal);
+        })
+        .join('');
+    }, 22);
+  }
   const filaDelEncabezado = numero + 1;
   agregar((n) => columnas.map((c, i) => celda(`${letraDeColumna(i)}${n}`, c.titulo, ESTILO.encabezado)).join(''), 32);
   const primeraDeDatos = numero + 1;
@@ -83,6 +98,7 @@ function hojaXml({ titulo, nota, columnas, filas, totales }) {
     `<sheetViews><sheetView workbookViewId="0">${panel}</sheetView></sheetViews>` +
     `<cols>${anchos}</cols>` +
     `<sheetData>${renglones.join('')}</sheetData>` +
+    (combinadas.length > 0 ? `<mergeCells count="${combinadas.length}">${combinadas.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>` : '') +
     '</worksheet>'
   );
 }
