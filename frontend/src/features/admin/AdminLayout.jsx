@@ -6,17 +6,18 @@ import BarraLateral from './componentes/BarraLateral';
 import MiCuentaModal from './MiCuentaModal';
 import { SECCIONES } from './secciones';
 import { ProveedorDeSesion } from './SesionAdmin';
+import { useAvisosDeSolvencia } from './useAvisosDeSolvencia';
 import { useCierrePorInactividad } from './useCierrePorInactividad';
 import { useContadoresDelPanel } from './useContadoresDelPanel';
 import { ROLES_DEL_PERSONAL } from './estados';
 import { EVENTO_SESION_EXPIRADA } from '../../shared/api/axiosClient';
-import { borrarSesion, leerSesion } from '../../shared/auth/sesion';
+import { borrarSesion, guardarSesion, leerSesion } from '../../shared/auth/sesion';
 import { RUTA_DEL_PANEL } from '../../shared/config/rutas';
 import Badge from '../../shared/components/Badge';
 import Button from '../../shared/components/Button';
 import Nota from '../../shared/components/Nota';
 
-const MINUTOS_DE_INACTIVIDAD = 20;
+const MINUTOS_DE_INACTIVIDAD = 20; // si la sesión no dice otra cosa (una sesión iniciada antes de que existiera la configuración)
 const SEGUNDOS_DE_AVISO = 60;
 
 const AVISO_SESION_TERMINADA = 'Tu sesión terminó. Inicia sesión de nuevo para continuar.';
@@ -63,12 +64,34 @@ export default function AdminLayout() {
     return () => window.removeEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
   }, []);
 
+  // El tiempo de inactividad depende del rol y lo fija la administración (Configuración). Se vuelve a pedir al abrir el panel, para
+  // seguir un cambio hecho después de iniciar sesión.
+  useEffect(() => {
+    if (!sesion?.token) return;
+    authApi
+      .me()
+      .then(({ data }) => {
+        const minutos = data.data.minutosDeInactividad;
+        if (minutos === undefined || minutos === sesion.minutosDeInactividad) return;
+        const actualizada = { ...sesion, minutosDeInactividad: minutos };
+        guardarSesion(actualizada);
+        setSesion(actualizada);
+      })
+      .catch(() => {
+        // si falla, sigue el tiempo guardado
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sesion?.token]);
+
+  const minutosDeInactividad = sesion?.minutosDeInactividad ?? MINUTOS_DE_INACTIVIDAD;
   const segundosRestantes = useCierrePorInactividad({
-    activo: Boolean(sesion),
-    minutos: MINUTOS_DE_INACTIVIDAD,
+    activo: Boolean(sesion) && minutosDeInactividad > 0,
+    minutos: minutosDeInactividad,
     avisoSegundos: SEGUNDOS_DE_AVISO,
     alCerrar: () => cerrarSesion(AVISO_INACTIVIDAD),
   });
+
+  useAvisosDeSolvencia(sesion?.rol);
 
   // El cajón del menú (pantallas chicas) se cierra al cambiar de sección y con Escape.
   useEffect(() => {

@@ -125,8 +125,10 @@ function crearApp() {
   const origenesPermitidos = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
   app.use(cors(origenesPermitidos.length > 0 ? { origin: origenesPermitidos } : undefined));
 
-  // La importación del catálogo trae miles de filas: es la única petición que puede ser grande.
+  // La importación del catálogo trae miles de filas, y una solicitud de solvencia trae dos fotos (de hasta 1 MB cada una, en base64):
+  // son las únicas peticiones que pueden ser grandes.
   app.use('/api/admin/catalogo/importar', express.json({ limit: '8mb' }));
+  app.post('/api/solvencia', express.json({ limit: '3mb' }));
   app.use(express.json({ limit: '100kb' }));
 
   // Límites de uso: evitan que un programa llene la biblioteca de reservas o solicitudes falsas. Solo cuentan las
@@ -247,6 +249,10 @@ async function arrancar() {
   avisarClavesTemporales();
   require('./src/respaldo/respaldo_data').iniciar();
   require('./src/catalog/revision_de_enlaces').iniciar();
+  require('./src/solvencia/solvencia_data')
+    .limpiarFotosResueltas()
+    .then((borradas) => borradas > 0 && console.log(`[solvencia] Se borraron las fotos de ${borradas} solicitudes ya resueltas`))
+    .catch((error) => console.warn(`[solvencia] No se pudieron revisar las fotos guardadas: ${error.message}`));
   mantenerDespierto();
   comprobarAlArrancar().catch((error) => console.warn(`[correo] No se pudo comprobar el correo: ${error.message}`));
 }

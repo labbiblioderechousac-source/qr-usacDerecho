@@ -282,6 +282,41 @@ async function escribirColeccion(nombre, texto, { cambiadas = [], borradas = [],
   }
 }
 
+// Fotos de las solicitudes de solvencia que esperan revisión (ver src/solvencia/fotos_data.js). Viven aquí solo mientras la solicitud está
+// pendiente: al aprobarla o rechazarla se guardan en la PC de la biblioteca y se borran de la base de datos.
+async function guardarFoto({ solicitud, tipo, mime, hash, contenido }) {
+  await asegurarConexion();
+  await cliente.query(
+    'insert into biblioteca.fotos_solvencia (solicitud, tipo, mime, hash, bytes, contenido, subida) values ($1, $2, $3, $4, $5, $6, now()) ' +
+      'on conflict (solicitud, tipo) do update set mime = excluded.mime, hash = excluded.hash, bytes = excluded.bytes, contenido = excluded.contenido, subida = now()',
+    [solicitud, tipo, mime, hash, contenido.length, contenido]
+  );
+}
+
+async function leerFoto(solicitud, tipo) {
+  await asegurarConexion();
+  const { rows } = await cliente.query('select mime, contenido from biblioteca.fotos_solvencia where solicitud = $1 and tipo = $2', [solicitud, tipo]);
+  return rows[0] ? { mime: rows[0].mime, contenido: rows[0].contenido } : null;
+}
+
+async function borrarFotos(solicitud) {
+  await asegurarConexion();
+  await cliente.query('delete from biblioteca.fotos_solvencia where solicitud = $1', [solicitud]);
+}
+
+async function solicitudesConFotos() {
+  await asegurarConexion();
+  const { rows } = await cliente.query('select distinct solicitud from biblioteca.fotos_solvencia');
+  return rows.map((fila) => fila.solicitud);
+}
+
+// Cuántas fotos esperan revisión y cuánto ocupan, para la sección «Datos y respaldo».
+async function resumenDeFotos() {
+  await asegurarConexion();
+  const { rows } = await cliente.query('select count(*) as fotos, coalesce(sum(bytes), 0) as bytes from biblioteca.fotos_solvencia');
+  return { fotos: Number(rows[0].fotos), bytes: Number(rows[0].bytes) };
+}
+
 // Cada documento con su tamaño, cuándo se guardó por última vez y, si es una colección, cuántos registros tiene.
 async function resumen() {
   const { rows } = await cliente.query(
@@ -336,6 +371,11 @@ module.exports = {
   leerRegistros,
   escribir,
   escribirColeccion,
+  guardarFoto,
+  leerFoto,
+  borrarFotos,
+  solicitudesConFotos,
+  resumenDeFotos,
   resumen,
   iniciarLatido,
   cerrar,

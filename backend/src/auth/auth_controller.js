@@ -1,5 +1,6 @@
 const { iniciarSesion, comprobarClave, cerrarSesion, cerrarSesionesDe } = require('./auth_data');
 const cuentasData = require('./cuentas_data');
+const configuracion = require('../configuracion/configuracion_data');
 const { tokenDe } = require('./auth_middleware');
 const { registrar } = require('../actividad/actividad_data');
 const { ok, fail } = require('../../utils/httpResponse');
@@ -28,9 +29,10 @@ function postLogout(req, res) {
   return ok(res, { cerrada: true });
 }
 
+// Quién es y tras cuántos minutos sin actividad se le cierra la sesión (0: nunca): el panel lo vuelve a pedir para seguir la configuración.
 function getMe(req, res) {
   const { usuario, nombre, rol } = req.sesion;
-  return ok(res, { usuario, nombre, rol, rolNombre: cuentasData.ROLES[rol] });
+  return ok(res, { usuario, nombre, rol, rolNombre: cuentasData.ROLES[rol], minutosDeInactividad: configuracion.minutosDeInactividad(rol) });
 }
 
 // Cada persona del personal puede cambiar su propia clave. Se pide la actual para que nadie con una sesión ajena

@@ -41,6 +41,7 @@ function filasDe(tipo, r) {
       ...(r.ordenDePago ? [['Orden de pago', r.ordenDePago]] : []),
       ...(r.fechaPapeleria ? [['Presentas tu papelería el', fechaLarga(r.fechaPapeleria)]] : []),
       ...(r.entregaEstimada ? [['Entrega estimada', `${fechaLarga(r.entregaEstimada.fecha)}, a las ${r.entregaEstimada.hora}`]] : []),
+      ...(r.fotos ? [['Fotos recibidas', 'Comprobante de pago y orden de pago']] : []),
     ];
   }
   return [];
@@ -52,7 +53,7 @@ function instruccionesDe(tipo, toleranciaMinutos, horasDePenalizacion) {
     const tolerancia = toleranciaMinutos ? ` Si no te presentas dentro de ${toleranciaMinutos} minutos del inicio, la reserva se libera${castigo}.` : '';
     return `Presenta el número de reserva o el código de confirmación en el mostrador.${tolerancia} La biblioteca puede cancelar una reserva si se incumple el reglamento del servicio.`;
   }
-  return 'Tu solicitud será revisada por el personal de la biblioteca. Revisa que tus datos estén correctos: si la solvencia se emite con datos incorrectos (nombres, CUI, carné o fecha) no hay reposición y habría que pagar y tramitarla de nuevo.';
+  return 'Tu solicitud será revisada por el personal de la biblioteca. Cuando se apruebe recibirás en tu correo tu constancia de solvencia en PDF; si hubiera algo que corregir, te escribiremos con el motivo. Revisa que tus datos estén correctos: si la solvencia se emite con datos incorrectos (nombres, CUI, carné o fecha) no hay reposición y habría que pagar y tramitarla de nuevo.';
 }
 
 // La hoja del comprobante, igual al correo: franja azul con la biblioteca, línea roja, el título, los datos y las indicaciones.

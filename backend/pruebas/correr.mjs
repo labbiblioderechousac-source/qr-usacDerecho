@@ -25,6 +25,7 @@ const require = createRequire(import.meta.url);
 // `modulos`: paquetes de desarrollo que necesita. `base`: solo corre con DATABASE_URL_PRUEBA (prueba el almacenamiento en PostgreSQL). Las demás arrancan sus propios servidores o prueban un módulo directamente.
 const PRUEBAS = [
   { nombre: 'propuesta', servidor: true, fases: ['escribir', 'verificar'] },
+  { nombre: 'solvencia-fotos' },
   { nombre: 'horas', servidor: true },
   { nombre: 'fin-de-semana' },
   { nombre: 'url-qr', servidor: true },

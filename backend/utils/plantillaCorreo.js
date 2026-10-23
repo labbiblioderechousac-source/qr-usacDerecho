@@ -27,14 +27,16 @@ function esc(valor) {
 }
 
 // `filas`: pares [etiqueta, valor]; con un tercer elemento 'codigo' el valor se resalta (números y códigos de confirmación).
-// `parrafos`: textos que van debajo de los datos. `previa`: la línea que algunos programas muestran junto al asunto.
-function plantilla({ titulo, previa = '', filas = [], parrafos = [] }) {
+// `parrafos`: textos que van debajo de los datos; `introduccion`, los que van antes (el saludo de un correo formal).
+// `previa`: la línea que algunos programas muestran junto al asunto.
+function plantilla({ titulo, previa = '', introduccion = [], filas = [], parrafos = [] }) {
   const texto = [
     biblioteca.nombre,
     biblioteca.facultad,
     '',
     titulo,
     '',
+    ...introduccion.flatMap((parrafo) => [parrafo, '']),
     ...filas.map(([etiqueta, valor]) => `${etiqueta}: ${valor}`),
     ...parrafos.flatMap((parrafo) => ['', parrafo]),
   ].join('\n');
@@ -49,6 +51,10 @@ function plantilla({ titulo, previa = '', filas = [], parrafos = [] }) {
       }">${esc(valor)}</td>
 </tr>`;
     })
+    .join('\n');
+
+  const introduccionHtml = introduccion
+    .map((parrafo) => `<p style="margin:0 0 14px;color:${COLOR.texto};font-size:15px;line-height:1.6;">${esc(parrafo)}</p>`)
     .join('\n');
 
   const parrafosHtml = parrafos
@@ -81,6 +87,7 @@ function plantilla({ titulo, previa = '', filas = [], parrafos = [] }) {
 <tr><td style="height:4px;line-height:4px;font-size:0;background:${COLOR.rojo};">&nbsp;</td></tr>
 <tr><td style="padding:28px;font-family:Arial,Helvetica,sans-serif;color:${COLOR.texto};">
 <h1 style="margin:0 0 14px;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.3;color:${COLOR.azulClaro};">${esc(titulo)}</h1>
+${introduccionHtml}
 <table role="presentation" cellpadding="0" cellspacing="0" style="border-top:1px solid ${COLOR.borde};border-bottom:1px solid ${COLOR.borde};width:100%;padding:6px 0;">
 ${filasHtml}
 </table>

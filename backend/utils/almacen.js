@@ -236,6 +236,14 @@ function encolar(nombre) {
   return cola;
 }
 
+// Otras operaciones con la base de datos (las fotos de las solvencias) van en la misma fila que las escrituras del almacén: la conexión es
+// una sola y así nunca caen dentro de una transacción a medias. Devuelve el resultado de `tarea` (o su error).
+function enLaCola(tarea) {
+  const resultado = cola.then(tarea);
+  cola = resultado.catch(() => {});
+  return resultado;
+}
+
 async function escribirPendiente(nombre) {
   const item = pendientes.get(nombre);
   if (!item) return;
@@ -373,4 +381,4 @@ function escribirDirecto(nombre, valor) {
   return escribirEnBase(nombre, valor, { reemplazar: true });
 }
 
-module.exports = { usaBaseDeDatos, iniciar, cargar, guardar, guardarPendientes, vaciar, apagar, descripcion, situacion, respaldo, escribirDirecto };
+module.exports = { usaBaseDeDatos, iniciar, cargar, guardar, guardarPendientes, vaciar, apagar, descripcion, situacion, respaldo, escribirDirecto, enLaCola, carpeta };

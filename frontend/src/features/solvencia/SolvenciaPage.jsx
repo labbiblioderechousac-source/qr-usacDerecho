@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Send } from 'lucide-react';
 import { solvenciaApi } from './solvenciaApi';
+import CampoDeFoto from './CampoDeFoto';
 import { getErrorMessage } from '../../shared/api/axiosClient';
 import { useKiosco } from '../../shared/kiosco/KioscoContext';
 import AlertBanner from '../../shared/components/AlertBanner';
@@ -25,6 +26,21 @@ const CAMPOS_INICIALES = {
   esEstudiante: false,
   revise: false,
 };
+
+const SIN_FOTOS = { comprobante: null, orden_de_pago: null };
+
+const FOTOS = [
+  {
+    tipo: 'comprobante',
+    etiqueta: 'Foto del comprobante de pago',
+    ayuda: 'La boleta de depósito del banco donde pagaste. Que se lea el número de orden de pago.',
+  },
+  {
+    tipo: 'orden_de_pago',
+    etiqueta: 'Foto de la orden de pago',
+    ayuda: 'La orden que generaste en SIIF. Que se lea el detalle de pago.',
+  },
+];
 
 const PROGRAMAS = [
   'Licenciatura en Ciencias Jurídicas y Sociales, Abogado y Notario',
@@ -60,9 +76,15 @@ function Pasos({ actual }) {
   );
 }
 
-function validar(form, diasMaximos) {
+function validar(form, diasMaximos, fotos, fotosObligatorias) {
   const hoy = hoyISO();
   const errores = {};
+  if (fotosObligatorias) {
+    if (!fotos.comprobante) errores.comprobante = 'Sube la foto del comprobante de pago.';
+    if (!fotos.orden_de_pago) errores.orden_de_pago = 'Sube la foto de la orden de pago.';
+  } else if (Boolean(fotos.comprobante) !== Boolean(fotos.orden_de_pago)) {
+    errores[fotos.comprobante ? 'orden_de_pago' : 'comprobante'] = 'Sube las dos fotos, o ninguna.';
+  }
   if (!textoEntre(form.solicitante, 3, 80)) errores.solicitante = 'Escribe tu nombre completo.';
   if (!/^[0-9A-Za-z-]{5,15}$/.test(form.identificacion.trim())) errores.identificacion = 'Escribe tu carné (de 5 a 15 letras o números).';
   if (soloDigitos(form.cui).length !== 13) errores.cui = 'El CUI (el número de tu DPI) tiene 13 números.';
@@ -88,6 +110,7 @@ export default function SolvenciaPage() {
   const { kiosco } = useKiosco();
   const [reglas, setReglas] = useState(null);
   const [form, setForm] = useState(CAMPOS_INICIALES);
+  const [fotos, setFotos] = useState(SIN_FOTOS);
   const [errores, setErrores] = useState({});
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
@@ -111,9 +134,17 @@ export default function SolvenciaPage() {
     if (errores[campo]) setErrores((previo) => ({ ...previo, [campo]: '' }));
   }
 
+  function cambiarFoto(tipo, foto) {
+    setFotos((previas) => ({ ...previas, [tipo]: foto }));
+    if (errores[tipo]) setErrores((previo) => ({ ...previo, [tipo]: '' }));
+  }
+
+  // En la web las dos fotos son obligatorias. En un kiosco (sin cámara) se pueden omitir: el personal revisa los papeles en el mostrador.
+  const fotosObligatorias = !kiosco;
+
   async function enviar(e) {
     e.preventDefault();
-    const encontrados = validar(form, diasMaximos);
+    const encontrados = validar(form, diasMaximos, fotos, fotosObligatorias);
     setErrores(encontrados);
     if (hayErrores(encontrados)) {
       setError('Revisa los campos marcados.');
@@ -124,9 +155,16 @@ export default function SolvenciaPage() {
     setError('');
     try {
       const { revise, ...datos } = form;
-      const res = await solvenciaApi.solicitar({ ...datos, cui: soloDigitos(form.cui), kiosco });
+      const conFotos = fotos.comprobante && fotos.orden_de_pago;
+      const res = await solvenciaApi.solicitar({
+        ...datos,
+        cui: soloDigitos(form.cui),
+        kiosco,
+        ...(conFotos ? { fotos: { comprobante: fotos.comprobante.dataUrl, orden_de_pago: fotos.orden_de_pago.dataUrl } } : {}),
+      });
       setComprobante(res.data.data);
       setForm(CAMPOS_INICIALES); // el formulario se limpia al terminar: no queda nada para la persona siguiente
+      setFotos(SIN_FOTOS);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(getErrorMessage(err, 'No se pudo registrar la solicitud'));
@@ -258,6 +296,21 @@ export default function SolvenciaPage() {
               {form.fechaPapeleria && !errores.fechaPapeleria ? (
                 <p className="-mt-2 text-sm text-slate-600">Presentarás tu papelería el {fechaLarga(form.fechaPapeleria)}.</p>
               ) : null}
+            </fieldset>
+
+            <fieldset className="flex flex-col gap-4">
+              <legend className="mb-1 font-display text-lg font-semibold text-slate-900">Fotos del pago</legend>
+              <Nota tono="info" titulo="Antes de tomar las fotos, verifica">
+                Que en el <b>detalle de pago</b> de la orden aparezca <i>Biblioteca (De mi Unidad Académica) – Solvencia de Biblioteca</i>, y que el{' '}
+                <b>número de orden de pago</b> sea el mismo en la orden y en la boleta de depósito. Toma cada foto completa, de frente y con buena
+                luz: si no se lee, la solicitud se rechaza.
+                {fotosObligatorias ? null : ' En el kiosco puedes enviar sin fotos: lleva tu boleta y tu orden de pago al mostrador.'}
+              </Nota>
+              <div className="grid gap-5 sm:grid-cols-2">
+                {FOTOS.map(({ tipo, etiqueta, ayuda }) => (
+                  <CampoDeFoto key={tipo} etiqueta={etiqueta} ayuda={ayuda} foto={fotos[tipo]} error={errores[tipo]} onCambiar={(foto) => cambiarFoto(tipo, foto)} />
+                ))}
+              </div>
             </fieldset>
 
             <fieldset className="flex flex-col gap-3.5">

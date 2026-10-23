@@ -210,6 +210,7 @@ async function persistencia(bd) {
         ordenDePago: '88123456',
         fechaPapeleria: LUNES,
         esEstudiante: true,
+        kiosco: 'k1', // sin fotos: las fotos se prueban en pruebas/solvencia-fotos.mjs
       },
     });
     ok(sol.estado === 200, `se crea una solicitud de solvencia (${sol.estado} ${sol.error ?? ''})`);

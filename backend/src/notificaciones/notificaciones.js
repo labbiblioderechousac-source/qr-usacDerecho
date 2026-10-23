@@ -1,5 +1,6 @@
 const { avisarPorCorreo } = require('../../utils/correo');
 const { plantilla } = require('../../utils/plantillaCorreo');
+const biblioteca = require('../../utils/biblioteca');
 const configuracion = require('../configuracion/configuracion_data');
 
 // Los correos que el sistema manda a las personas: el comprobante de una reserva o de una solicitud de solvencia (propuesta,
@@ -76,9 +77,64 @@ function mensajeDeSolvencia(s) {
         ...(s.identificacion ? [['Carné', s.identificacion]] : []),
         ...(s.fechaPapeleria ? [['Presentas tu papelería el', fechaLarga(s.fechaPapeleria)]] : []),
         ...(entrega ? [['Entrega estimada', entrega]] : []),
+        ...(s.fotos ? [['Fotos recibidas', 'Comprobante de pago y orden de pago']] : []),
       ],
       parrafos: [
-        'Tu solicitud será revisada por el personal de la biblioteca. Revisa que tus datos estén correctos: si la solvencia se emite con datos incorrectos (nombres, CUI, carné o fecha) no hay reposición y habría que pagar y tramitarla de nuevo.',
+        'Tu solicitud será revisada por el personal de la biblioteca. Cuando se apruebe recibirás en este correo tu constancia de solvencia en PDF; si hubiera algo que corregir, te escribiremos con el motivo.',
+        'Revisa que tus datos estén correctos: si la solvencia se emite con datos incorrectos (nombres, CUI, carné o fecha) no hay reposición y habría que pagar y tramitarla de nuevo.',
+      ],
+    }),
+  };
+}
+
+// Fecha de un momento ISO en hora de la biblioteca: "22/10/2026".
+const soloFecha = (iso) => fechaYHora(iso).fecha;
+
+// Correos formales de la revisión (los textos los acordó la biblioteca): la persona recibe su solvencia o el motivo del rechazo.
+function mensajeDeSolvenciaAprobada(s) {
+  return {
+    tipo: 'solvencia_aprobada',
+    asunto: `Solvencia de biblioteca aprobada – ${s.solicitante}`,
+    ...plantilla({
+      titulo: 'Solvencia de biblioteca aprobada',
+      previa: `Adjuntamos su constancia de solvencia (solicitud ${s.id})`,
+      introduccion: [
+        `Estimado(a) ${s.solicitante}:`,
+        `Por este medio le informamos que su solicitud de solvencia de biblioteca, presentada el ${soloFecha(s.creadoEn)}, ha sido aprobada, luego de verificar el comprobante de pago y la orden de pago correspondientes.`,
+        'Adjunto a este correo encontrará su constancia de solvencia en PDF, la cual podrá imprimir y presentar en los trámites que la requieran.',
+      ],
+      filas: [
+        ['Número de solicitud', s.id, 'codigo'],
+        ['Carné', s.identificacion],
+        ['Fecha de aprobación', soloFecha(s.atendidaEn)],
+        ...(s.fechaPapeleria ? [['Presenta su papelería el', fechaLarga(s.fechaPapeleria)]] : []),
+      ],
+      parrafos: ['Atentamente,', `${biblioteca.nombre}\n${biblioteca.facultad}`],
+    }),
+  };
+}
+
+function mensajeDeSolvenciaRechazada(s) {
+  return {
+    tipo: 'solvencia_rechazada',
+    asunto: 'Solicitud de solvencia de biblioteca – Requiere corrección',
+    ...plantilla({
+      titulo: 'Su solicitud de solvencia requiere corrección',
+      previa: `Solicitud ${s.id}: ${s.observacion}`,
+      introduccion: [
+        `Estimado(a) ${s.solicitante}:`,
+        `Le informamos que su solicitud de solvencia de biblioteca, presentada el ${soloFecha(s.creadoEn)}, no pudo ser aprobada por el siguiente motivo:`,
+      ],
+      filas: [
+        ['Motivo', s.observacion],
+        ['Número de solicitud', s.id, 'codigo'],
+        ['Carné', s.identificacion],
+      ],
+      parrafos: [
+        'Le solicitamos corregir lo indicado y enviar nuevamente su solicitud a través del sistema, adjuntando el comprobante de pago y la orden de pago legibles.',
+        `Para cualquier consulta puede comunicarse con nosotros por ${biblioteca.contacto}.`,
+        'Atentamente,',
+        `${biblioteca.nombre}\n${biblioteca.facultad}`,
       ],
     }),
   };
@@ -183,6 +239,19 @@ function solvenciaRecibida(solicitud) {
   return avisarPorCorreo({ para: solicitud.correo, ...mensajeDeSolvencia(solicitud) });
 }
 
+// `constancia`: { nombre, contenido (Buffer del PDF) }.
+function solvenciaAprobada(solicitud, constancia) {
+  return avisarPorCorreo({
+    para: solicitud.correo,
+    ...mensajeDeSolvenciaAprobada(solicitud),
+    adjuntos: [{ nombre: constancia.nombre, contenido: constancia.contenido, tipo: 'application/pdf' }],
+  });
+}
+
+function solvenciaRechazada(solicitud) {
+  return avisarPorCorreo({ para: solicitud.correo, ...mensajeDeSolvenciaRechazada(solicitud) });
+}
+
 // Cuánto se espera el correo de confirmación antes de responder: así la pantalla puede decir si salió o si falló. Si el servicio de
 // correo tarda más, el envío sigue por su cuenta y la pantalla dice que va en camino (CORREO_ESPERA_CONFIRMACION_MS es para las pruebas).
 const ESPERA_DE_LA_CONFIRMACION_MS = Number(process.env.CORREO_ESPERA_CONFIRMACION_MS) || 6000;
@@ -226,6 +295,8 @@ module.exports = {
   mensajeDeReservaLiberada,
   mensajeDeNoPresentado,
   mensajeDeSolvencia,
+  mensajeDeSolvenciaAprobada,
+  mensajeDeSolvenciaRechazada,
   mensajeDePrueba,
   textoDeReserva,
   textoDeSolvencia,
@@ -235,4 +306,6 @@ module.exports = {
   reservaLiberada,
   noSePresento,
   solvenciaRecibida,
+  solvenciaAprobada,
+  solvenciaRechazada,
 };

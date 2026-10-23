@@ -3,10 +3,15 @@ const { rechazo } = require('../../utils/errores');
 const { generarCodigoConfirmacion, correoValido } = require('../../utils/codigos');
 const { esFechaISO, fechaLocal, minutosDelDia, sumarDias } = require('../../utils/fechas');
 const horarios = require('../horarios/horarios_data');
+const fotosData = require('./fotos_data');
 
-// Solvencias de biblioteca (paz y salvo). Siguen el proceso que la biblioteca publica en su sitio: la persona paga la
-// orden de pago de la universidad, llena la solicitud con sus datos y el número de esa orden, el personal la revisa y
-// la solvencia se entrega en un horario que depende de cuándo se envió la solicitud.
+// Solvencias de biblioteca (paz y salvo). Siguen el proceso que la biblioteca publica en su sitio: la persona genera la
+// orden de pago en SIIF, la paga en el banco, llena la solicitud con sus datos y el número de esa orden, y sube la foto del
+// comprobante (la boleta de depósito) y la de la orden de pago. La administración la revisa y la aprueba (le llega su solvencia
+// en PDF por correo) o la rechaza con un motivo. La entrega se promete en un horario que depende de cuándo se envió la solicitud.
+//
+// Estados: pendiente -> aprobada o rechazada. (Las solicitudes guardadas por versiones anteriores pueden estar «en_revision»: se
+// tratan como pendientes.)
 const MOTIVOS = ['Grado', 'Certificado de paz y salvo', 'Retiro del programa', 'Otro'];
 
 // La solicitud se envía con al menos un día de anticipación a la fecha en que se presentará la papelería, y con un máximo de siete.
@@ -104,63 +109,150 @@ function validar({ solicitante, identificacion, cui, programa, motivo, correo, o
   return { solicitante: nombre, identificacion: carne.toUpperCase(), cui: cuiLimpio, programa: carrera, motivo, correo: correoLimpio, ordenDePago: orden.toUpperCase(), fechaPapeleria };
 }
 
-function crear(datos, ahora = new Date()) {
+// Crea la solicitud. Desde la web las dos fotos son obligatorias; desde un kiosco (sin cámara) pueden faltar: el personal revisa los
+// papeles en el mostrador. Las fotos se guardan antes que la solicitud: si no se pudieran guardar, la solicitud no se registra.
+async function crear(datos, ahora = new Date()) {
   const limpios = validar(datos, ahora);
+  const kiosco = kioscoValido(datos.kiosco);
+  const fotos = fotosData.leerFotos(datos.fotos, { obligatorias: !kiosco });
+  const id = siguienteCodigo();
+  const subidaEn = ahora.toISOString();
+  if (fotos) await fotosData.guardar(id, fotos);
   const solicitud = {
-    id: siguienteCodigo(),
+    id,
     ...limpios,
-    ...(kioscoValido(datos.kiosco) ? { kiosco: kioscoValido(datos.kiosco) } : {}),
+    ...(kiosco ? { kiosco } : {}),
     codigoConfirmacion: generarCodigoConfirmacion(),
     entregaEstimada: entregaEstimada(ahora),
     estado: 'pendiente',
-    creadoEn: ahora.toISOString(),
+    creadoEn: subidaEn,
+    ...(fotos
+      ? {
+          fotos: Object.fromEntries(
+            Object.values(fotos).map((foto) => [
+              foto.tipo,
+              {
+                archivo: fotosData.nombreDeArchivo({ ...limpios, fecha: fechaLocal(ahora) }, foto.extension),
+                mime: foto.mime,
+                bytes: foto.contenido.length,
+                hash: foto.hash,
+                subidaEn,
+                enRevision: true, // la foto está en la base de datos esperando que la administración la revise
+              },
+            ])
+          ),
+        }
+      : {}),
   };
   solicitudes.push(solicitud);
   guardar();
   return solicitud;
 }
 
+const estaPendiente = (solicitud) => ['pendiente', 'en_revision'].includes(solicitud.estado);
+
+// En qué otras solicitudes aparece la misma foto (mismo hash): un comprobante de pago que alguien ya usó.
+function repetidasDe(solicitud) {
+  const avisos = {};
+  Object.entries(solicitud.fotos ?? {}).forEach(([tipo, foto]) => {
+    const otras = solicitudes.filter((s) => s.id !== solicitud.id && Object.values(s.fotos ?? {}).some((f) => f.hash === foto.hash)).map((s) => s.id);
+    if (otras.length > 0) avisos[tipo] = otras;
+  });
+  return avisos;
+}
+
+// Lo que ve el panel: cada solicitud con el aviso de fotos repetidas, sin tocar la guardada.
 function listar() {
-  return solicitudes.slice().sort((a, b) => b.creadoEn.localeCompare(a.creadoEn));
+  return solicitudes
+    .slice()
+    .sort((a, b) => b.creadoEn.localeCompare(a.creadoEn))
+    .map((s) => {
+      const repetidas = repetidasDe(s);
+      return Object.keys(repetidas).length > 0 ? { ...s, fotosRepetidas: repetidas } : s;
+    });
 }
 
 function buscarSolicitud(id) {
   return solicitudes.find((s) => s.id === id) || null;
 }
 
-const SIGUIENTE_ESTADO = { pendiente: 'en_revision', en_revision: 'aprobada' };
+// Antes de resolver una solicitud con fotos, el panel las guarda en la PC de la biblioteca y dice dónde quedaron
+// («solvencias/comprobante/Maria_Lopez_...webp»). Sin eso no se resuelve: al resolverla se borran de la base de datos y se perderían.
+function anotarDondeSeGuardaron(solicitud, guardadas) {
+  const conFotos = Object.entries(solicitud.fotos ?? {}).filter(([, foto]) => foto.enRevision);
+  if (conFotos.length === 0) return;
+  const rutas = guardadas && typeof guardadas === 'object' ? guardadas : {};
+  conFotos.forEach(([tipo]) => {
+    const ruta = String(rutas[tipo] ?? '').trim();
+    if (!ruta || ruta.length > 260 || ruta.includes('..') || !/^[\w .()/\\:-]+$/.test(ruta)) {
+      throw rechazo('Primero hay que guardar las fotos en la PC de la biblioteca (carpeta de solvencias): sin eso no se puede resolver la solicitud');
+    }
+  });
+  conFotos.forEach(([tipo, foto]) => {
+    foto.guardadaEn = String(rutas[tipo]).trim();
+    foto.enRevision = false;
+  });
+}
 
-function avanzarEstado(id) {
-  const solicitud = buscarSolicitud(id);
-  if (!solicitud) return null;
-  const siguiente = SIGUIENTE_ESTADO[solicitud.estado];
-  if (!siguiente) return solicitud;
-  solicitud.estado = siguiente;
-  if (siguiente === 'aprobada') solicitud.atendidaEn = new Date().toISOString();
+// Aprueba o rechaza: queda quién lo hizo y cuándo, y las fotos salen de la base de datos (ya están en la PC).
+async function resolver(solicitud, estado, sesion, guardadas) {
+  anotarDondeSeGuardaron(solicitud, guardadas);
+  solicitud.estado = estado;
+  solicitud.atendidaEn = new Date().toISOString();
+  solicitud.revisadaPor = { usuario: sesion?.usuario ?? null, nombre: sesion?.nombre ?? null };
   guardar();
+  if (solicitud.fotos) {
+    try {
+      await fotosData.borrar(solicitud.id);
+    } catch (error) {
+      // Quedan guardadas; se borran solas en el próximo arranque (limpiarFotosResueltas).
+      console.error(`[solvencia] No se pudieron borrar las fotos de ${solicitud.id}: ${error.message}`);
+    }
+  }
   return solicitud;
 }
 
-// Rechaza una solicitud. El motivo es opcional: si se escribe queda anotado en la solicitud para el personal (por ejemplo,
-// un dato mal escrito: la persona debe enviar otra solicitud).
-function rechazar(id, observacion) {
+function exigirPendiente(solicitud) {
+  if (!estaPendiente(solicitud)) throw rechazo(`La solicitud ${solicitud.id} ya fue ${solicitud.estado}`, 409);
+}
+
+async function aprobar(id, sesion, { guardadas } = {}) {
   const solicitud = buscarSolicitud(id);
   if (!solicitud) return null;
-  const motivo = String(observacion ?? '').trim();
-  if (motivo && (motivo.length < 3 || motivo.length > 500)) {
-    throw rechazo('El motivo del rechazo debe tener de 3 a 500 caracteres (o déjalo en blanco)');
+  exigirPendiente(solicitud);
+  delete solicitud.observacion;
+  return resolver(solicitud, 'aprobada', sesion, guardadas);
+}
+
+// Rechaza una solicitud. El motivo es obligatorio: le llega a la persona por correo para que corrija y envíe una nueva solicitud.
+async function rechazar(id, observacion, sesion, { guardadas } = {}) {
+  const solicitud = buscarSolicitud(id);
+  if (!solicitud) return null;
+  exigirPendiente(solicitud);
+  const motivo = String(observacion ?? '').trim().replace(/\s+/g, ' ');
+  if (motivo.length < 3 || motivo.length > 500) {
+    throw rechazo('Escribe el motivo del rechazo (de 3 a 500 caracteres): se le enviará a la persona por correo');
   }
-  solicitud.estado = 'rechazada';
-  if (motivo) solicitud.observacion = motivo;
-  solicitud.atendidaEn = new Date().toISOString();
-  guardar();
-  return solicitud;
+  solicitud.observacion = motivo;
+  return resolver(solicitud, 'rechazada', sesion, guardadas);
+}
+
+// Las fotos guardadas de solicitudes que ya no están pendientes se borran (ver fotos_data.limpiarResueltas).
+function limpiarFotosResueltas() {
+  return fotosData.limpiarResueltas(solicitudes.filter(estaPendiente).map((s) => s.id));
 }
 
 function resumen() {
+  const pendientes = solicitudes.filter(estaPendiente);
   return {
     total: solicitudes.length,
-    pendientes: solicitudes.filter((s) => s.estado === 'pendiente').length,
+    pendientes: pendientes.length,
+    // Las últimas que llegaron, para que el panel avise (con voz) cuando entra una nueva.
+    recientes: pendientes
+      .slice()
+      .sort((a, b) => b.creadoEn.localeCompare(a.creadoEn))
+      .slice(0, 10)
+      .map(({ id, solicitante, creadoEn }) => ({ id, solicitante, creadoEn })),
   };
 }
 
@@ -171,7 +263,8 @@ module.exports = {
   crear,
   listar,
   buscarSolicitud,
-  avanzarEstado,
+  aprobar,
   rechazar,
+  limpiarFotosResueltas,
   resumen,
 };

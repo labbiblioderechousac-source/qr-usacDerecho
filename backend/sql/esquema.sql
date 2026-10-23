@@ -38,6 +38,24 @@ comment on table biblioteca.registros is 'Las listas largas de la biblioteca, un
 
 alter table biblioteca.registros enable row level security;
 
+-- Fotos de las solicitudes de solvencia (comprobante de pago y orden de pago) mientras esperan revisión. Al aprobar o rechazar la
+-- solicitud, el panel las guarda en la PC de la biblioteca (C:\solvencias) y se borran de aquí: la tabla solo tiene las pendientes.
+-- La solicitud conserva el hash de cada foto (para detectar comprobantes repetidos), el nombre del archivo y quién la revisó.
+create table if not exists biblioteca.fotos_solvencia (
+  solicitud   text not null,
+  tipo        text not null check (tipo in ('comprobante', 'orden_de_pago')),
+  mime        text not null,
+  hash        text not null,
+  bytes       integer not null,
+  contenido   bytea not null,
+  subida      timestamptz not null default now(),
+  primary key (solicitud, tipo)
+);
+
+comment on table biblioteca.fotos_solvencia is 'Fotos de las solicitudes de solvencia pendientes de revisión. Se borran al resolver la solicitud. Lo escribe solo el servidor.';
+
+alter table biblioteca.fotos_solvencia enable row level security;
+
 do $$
 declare
   rol text;
@@ -122,7 +140,11 @@ select
   s->'entregaEstimada'->>'hora'                                     as entrega_hora,
   s->>'observacion'                                                 as observacion,
   s->>'kiosco'                                                      as kiosco,
-  nullif(s->>'creadoEn', '')::timestamptz                           as creada_en
+  nullif(s->>'creadoEn', '')::timestamptz                           as creada_en,
+  s->'revisadaPor'->>'nombre'                                       as revisada_por,
+  nullif(s->>'atendidaEn', '')::timestamptz                         as revisada_en,
+  s->'fotos'->'comprobante'->>'archivo'                             as archivo_comprobante,
+  s->'fotos'->'orden_de_pago'->>'archivo'                           as archivo_orden_de_pago
 from (select datos as s, orden from biblioteca.registros where coleccion = 'solvencia') q
 order by q.orden;
 

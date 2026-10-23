@@ -1,11 +1,13 @@
 const express = require('express');
-const { getMotivos, getReglas, postSolicitud, getSolicitudes, patchAvanzar, patchRechazar, getResumen } = require('./solvencia_controller');
+const { getMotivos, getReglas, postSolicitud, getSolicitudes, getFoto, getConstancia, patchAprobar, patchRechazar, getResumen } = require('./solvencia_controller');
 const { autenticar, requiereRol } = require('../auth/auth_middleware');
 
 const router = express.Router();
 
-// El personal que atiende solicitudes: administración y circulación.
+// El personal que ve las solicitudes: administración y circulación.
 const personal = [autenticar, requiereRol('administrador', 'circulacion')];
+// Solo la administración ve las fotos y aprueba o rechaza.
+const soloAdministrador = [autenticar, requiereRol('administrador')];
 
 // Públicas: cualquier persona puede pedir su solvencia.
 router.get('/motivos', getMotivos);
@@ -15,7 +17,9 @@ router.post('/', postSolicitud);
 // Solo personal autorizado.
 router.get('/resumen', ...personal, getResumen);
 router.get('/', ...personal, getSolicitudes);
-router.patch('/:id/avanzar', ...personal, patchAvanzar);
-router.patch('/:id/rechazar', ...personal, patchRechazar);
+router.get('/:id/fotos/:tipo', ...soloAdministrador, getFoto);
+router.get('/:id/constancia', ...soloAdministrador, getConstancia);
+router.patch('/:id/aprobar', ...soloAdministrador, patchAprobar);
+router.patch('/:id/rechazar', ...soloAdministrador, patchRechazar);
 
 module.exports = router;

@@ -74,8 +74,10 @@ const RUTAS = [
   ['PATCH', '/reservas/item/R-999/quitar-penalizacion', CIRC],
   ['GET', '/solvencia', CIRC],
   ['GET', '/solvencia/resumen', CIRC],
-  ['PATCH', '/solvencia/SOL-999/avanzar', CIRC],
-  ['PATCH', '/solvencia/SOL-999/rechazar', CIRC, {}],
+  ['GET', '/solvencia/SOL-999/fotos/comprobante', SOLO_ADMIN],
+  ['GET', '/solvencia/SOL-999/constancia', SOLO_ADMIN],
+  ['PATCH', '/solvencia/SOL-999/aprobar', SOLO_ADMIN, {}],
+  ['PATCH', '/solvencia/SOL-999/rechazar', SOLO_ADMIN, {}],
   ['GET', '/auth/me', TODOS],
   ['POST', '/auth/cambiar-clave', TODOS, {}],
 ];

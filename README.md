@@ -175,7 +175,7 @@ Lo que conviene saber del plan gratuito ([documentación de Render](https://rend
   Render ya define): no necesita cuentas ni servicios externos. `KEEPALIVE=0` lo apaga. Solo funciona mientras está despierto; si ya se
   durmió, la primera visita de cualquier persona lo despierta.
 - Las sesiones del panel se guardan en la base: si el servicio se duerme o se publica una versión, el personal sigue dentro (hasta
-  que su sesión venza, a las 8 horas).
+  que su sesión venza: a las 8 horas, o a los 30 días sin usarla en un rol sin cierre por inactividad).
 - Son 750 horas gratis al mes por espacio de trabajo: un solo servicio encendido todo el mes cabe.
 - La base gratuita de Render caduca a los 30 días; por eso se usa Supabase, que además pausa los proyectos gratuitos tras una semana sin
   actividad (mientras haya visitas, no pasa).
@@ -358,6 +358,55 @@ ya llenos:
 Lo que el sistema no sabe (celular, llave, jornada o semestre, el documento que se deja y las horas reales) queda en blanco para
 llenarlo a mano. El equipo de cada tipo de lugar se ajusta en `frontend/src/features/reservas/equipoDeLosLugares.js`.
 
+### Solicitudes de solvencia (con las fotos del pago)
+
+Sigue el proceso que la biblioteca publica en su sitio (sección Solvencias): la persona genera la orden de pago en SIIF, la paga en el
+banco, llena el formulario y la biblioteca le envía su solvencia **en PDF** por correo.
+
+**En el formulario** (`/solvencia`) la persona sube dos fotos, cada una en su campo: el **comprobante de pago** (la boleta de depósito) y la
+**orden de pago**. En el celular puede tomarlas con la cámara. El navegador las achica antes de subirlas (unos 1600 px de ancho, WebP al
+80 %: de 200 a 300 KB); solo se aceptan JPG, PNG o WebP, y el servidor lo vuelve a comprobar por el contenido del archivo (tope de 1 MB).
+Desde un kiosco (sin cámara) se puede enviar sin fotos: el personal revisa los papeles en el mostrador.
+
+**Dónde quedan las fotos.** Mientras la solicitud está **pendiente**, las fotos viven en la base de datos (tabla
+`biblioteca.fotos_solvencia`, o la carpeta de datos sin `DATABASE_URL`) para que la administración las vea. Al **aprobar o rechazar**, el
+panel las guarda en la PC de la biblioteca y **se borran de la base de datos**: la base solo guarda las pendientes y no se llena. En la PC
+nunca se borran:
+
+```
+C:\solvencias\
+├── comprobante\      Maria_Lopez_202312345_2026-10-22.webp
+└── orden_de_pago\    Maria_Lopez_202312345_2026-10-22.webp
+```
+
+Los archivos se nombran con nombre + carné + fecha de subida, sin tildes ni ñ (si ya existe uno igual, se agrega `_2`). En la solicitud
+quedan para siempre el nombre del archivo, dónde se guardó, la fecha de subida y el **hash** de cada foto: si alguien vuelve a subir el
+mismo comprobante, el panel lo marca como **Repetida** y dice en qué solicitud se usó.
+
+**Revisión (solo administración).** En **Solvencias**, **Revisar** abre la solicitud con las dos fotos en miniatura (un clic las amplía),
+una lista de lo que hay que comprobar (que se lean, que el detalle diga *Solvencia de Biblioteca*, que el número de orden coincida con la
+boleta) y dos botones:
+
+- **Aprobar y enviar solvencia**: a la persona le llega el correo formal «Solvencia de biblioteca aprobada» con la **constancia en PDF**
+  adjunta (tamaño carta, para imprimir). La constancia se puede volver a descargar desde la tabla (**Constancia**). Su texto está en
+  `backend/src/solvencia/constancia_pdf.js` (`TEXTO`), por si la biblioteca usa una redacción oficial.
+- **Rechazar**: exige escribir el motivo (hay motivos frecuentes para elegir con un clic). A la persona le llega el correo «Requiere
+  corrección» con el motivo y la invitación a enviar una nueva solicitud.
+
+Queda anotado quién la revisó y cuándo, y aparece en la actividad del personal. Circulación ve la lista, pero no las fotos ni los botones.
+
+**La PC de la administración** (Chrome o Edge en computadora; otros navegadores no pueden escribir en la PC):
+
+1. Crea la carpeta `C:\solvencias`.
+2. En **Solvencias**, pulsa **Elegir carpeta** y elígela. Las subcarpetas `comprobante` y `orden_de_pago` se crean solas. El navegador la
+   recuerda; de vez en cuando pide el permiso otra vez (**Dar permiso**).
+3. **Avisos cuando llega una solicitud**: con el panel abierto (aunque esté minimizado), la PC dice en voz alta «Llegó una nueva solicitud
+   de solvencia de…» y muestra una notificación de Windows (pulsa **Permitir notificaciones** la primera vez). **Probar aviso** sirve para
+   comprobar el volumen. Cada PC elige si quiere voz y notificación.
+4. En **Configuración → Cierre de sesión por inactividad**, la administración elige tras cuántos minutos se cierra la sesión de cada rol.
+   De entrada la administración está en **Nunca** (la PC queda atenta a las solicitudes, aunque se cierre el navegador) y los demás roles
+   en 20 minutos. Úsalo solo en computadoras de la biblioteca que nadie más usa.
+
 ## Kioscos
 
 Cada kiosco abre el sitio con su número: `https://tu-servidor/?kiosco=1`, `?kiosco=2`... Con eso el sitio:
@@ -387,8 +436,8 @@ completo el equipo debe estar configurado como kiosco:
 
 | Rol | Qué puede hacer |
 | --- | --- |
-| Administrador | Todo: cuentas del personal, configuración (tolerancia, penalización, horas de las reservas y pausas), horarios y cierres, catálogo, actividad |
-| Personal de circulación | Reservas, solicitudes de solvencia y usuarios |
+| Administrador | Todo: revisar y resolver las solvencias (con sus fotos), cuentas del personal, configuración (tolerancia, penalización, horas de las reservas, pausas y cierre de sesión por inactividad), horarios y cierres, catálogo, actividad |
+| Personal de circulación | Reservas, usuarios y ver las solicitudes de solvencia (sin las fotos ni resolverlas) |
 | Personal de tesis | Catálogo, documentos digitales y códigos QR |
 | Consulta | Solo estadísticas |
 
@@ -423,5 +472,5 @@ porcentaje de quienes reservaron llegó. La API es `GET /api/admin/estadisticas?
   se agrega algo de otro origen (un mapa, un video), hay que sumarlo en `POLITICA_DE_CONTENIDO` (`backend/server.js`). Cuando la visita
   llega por HTTPS se manda además HSTS, para que el navegador no vuelva a HTTP (detrás de un proxy hace falta `TRUST_PROXY`).
   `CSP=0` y `HSTS=0` las apagan.
-- Las sesiones duran 8 horas, se cierran tras 20 minutos sin actividad y una cuenta se bloquea 5 minutos después de 5 intentos
-  fallidos.
+- Las sesiones duran 8 horas y se cierran tras 20 minutos sin actividad (la administración cambia ese tiempo por rol en **Configuración**;
+  con «Nunca», la sesión dura 30 días y se renueva con el uso). Una cuenta se bloquea 5 minutos después de 5 intentos fallidos.

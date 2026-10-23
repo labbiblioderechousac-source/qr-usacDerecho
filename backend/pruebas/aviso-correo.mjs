@@ -62,7 +62,7 @@ try {
     ok(/Confirmación de reserva/.test(api.recibidos[0].subject ?? ''), `con el asunto de la confirmación (${api.recibidos[0].subject})`);
 
     const solvencia = await llamar('POST', '/solvencia', {
-      cuerpo: { solicitante: 'Luis Ramírez', identificacion: '201955321', cui: '2456 78901 0101', programa: 'Licenciatura en Ciencias Jurídicas y Sociales', motivo: 'Grado', correo: 'luis@ejemplo.com', ordenDePago: '88123456', fechaPapeleria: LUNES, esEstudiante: true },
+      cuerpo: { solicitante: 'Luis Ramírez', identificacion: '201955321', cui: '2456 78901 0101', programa: 'Licenciatura en Ciencias Jurídicas y Sociales', motivo: 'Grado', correo: 'luis@ejemplo.com', ordenDePago: '88123456', fechaPapeleria: LUNES, esEstudiante: true, kiosco: 'k1' },
     });
     ok(solvencia.estado === 200 && solvencia.datos.correoDeConfirmacion === 'enviado', `la solicitud de solvencia también (${solvencia.estado} ${solvencia.datos?.correoDeConfirmacion ?? solvencia.error})`);
 

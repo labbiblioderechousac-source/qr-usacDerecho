@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { adminApi } from '../adminApi';
 import PaginaAdmin from '../componentes/PaginaAdmin';
-import { fechaLegible } from '../estados';
+import { ROLES_DEL_PERSONAL, fechaLegible } from '../estados';
 import { getErrorMessage } from '../../../shared/api/axiosClient';
 import AlertBanner from '../../../shared/components/AlertBanner';
 import Badge from '../../../shared/components/Badge';
@@ -24,6 +24,7 @@ export default function ConfiguracionPage() {
   const [horasPorDia, setHorasPorDia] = useState('');
   const [pausadas, setPausadas] = useState({});
   const [importantes, setImportantes] = useState([]);
+  const [inactividad, setInactividad] = useState({});
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -37,6 +38,7 @@ export default function ConfiguracionPage() {
     setHorasPorDia(String(configuracion.maxHorasPorDia));
     setPausadas(configuracion.reservasPausadas);
     setImportantes(configuracion.camposImportantes);
+    setInactividad(configuracion.minutosDeInactividad);
   }
 
   useEffect(() => {
@@ -67,7 +69,8 @@ export default function ConfiguracionPage() {
     Number(horasPorReserva) !== guardada.maxHorasPorReserva ||
     Number(horasPorDia) !== guardada.maxHorasPorDia ||
     SERVICIOS.some(({ tipo }) => pausadas[tipo] !== guardada.reservasPausadas[tipo]) ||
-    guardada.camposDeTesis.some(({ campo }) => importantes.includes(campo) !== guardada.camposImportantes.includes(campo));
+    guardada.camposDeTesis.some(({ campo }) => importantes.includes(campo) !== guardada.camposImportantes.includes(campo)) ||
+    Object.keys(ROLES_DEL_PERSONAL).some((rol) => inactividad[rol] !== guardada.minutosDeInactividad[rol]);
 
   async function guardar(e) {
     e.preventDefault();
@@ -103,6 +106,7 @@ export default function ConfiguracionPage() {
         maxHorasPorDia: porDia,
         reservasPausadas: pausadas,
         camposImportantes: guardada.camposDeTesis.map(({ campo }) => campo).filter((campo) => importantes.includes(campo)),
+        minutosDeInactividad: inactividad,
       });
       cargarEnFormulario(res.data.data);
       setAviso('Configuración guardada. Ya rige en los kioscos y en la web.');
@@ -114,7 +118,7 @@ export default function ConfiguracionPage() {
   }
 
   return (
-    <PaginaAdmin descripcion="Ajustes generales de las reservas y del catálogo. Lo que guardes rige desde ese momento, sin reiniciar nada.">
+    <PaginaAdmin descripcion="Ajustes generales de las reservas, del catálogo y de las sesiones del panel. Lo que guardes rige desde ese momento, sin reiniciar nada.">
       <form onSubmit={guardar} className="flex max-w-3xl flex-col gap-5">
         <AlertBanner>{error}</AlertBanner>
         {aviso ? (
@@ -255,6 +259,38 @@ export default function ConfiguracionPage() {
                   />
                   Importante
                 </label>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="flex flex-col gap-3 rounded-xl border border-border bg-white p-5" aria-labelledby="cierre-de-sesion">
+          <h2 id="cierre-de-sesion" className="text-base font-bold text-slate-900">
+            Cierre de sesión por inactividad
+          </h2>
+          <p className="text-sm text-slate-600">
+            Tras cuántos minutos sin tocar la pantalla se cierra la sesión del panel, según el rol. Con <b>Nunca</b> la sesión queda abierta en esa
+            PC hasta que la persona salga (útil en la PC de la administración, que avisa cuando llega una solicitud de solvencia); úsalo solo en
+            computadoras de la biblioteca que nadie más usa. El cambio se aplica a cada persona la próxima vez que abra el panel.
+          </p>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {Object.entries(ROLES_DEL_PERSONAL).map(([rol, { nombre }]) => (
+              <li key={rol} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <label htmlFor={`inactividad-${rol}`} className="text-sm font-semibold text-slate-900">
+                  {nombre}
+                </label>
+                <select
+                  id={`inactividad-${rol}`}
+                  value={inactividad[rol] ?? 20}
+                  onChange={(e) => setInactividad((previo) => ({ ...previo, [rol]: Number(e.target.value) }))}
+                  className="rounded-md border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
+                >
+                  {guardada.limites.minutosDeInactividad.map((minutos) => (
+                    <option key={minutos} value={minutos}>
+                      {minutos === 0 ? 'Nunca' : minutos < 60 ? `${minutos} minutos` : `${minutos / 60} ${minutos === 60 ? 'hora' : 'horas'}`}
+                    </option>
+                  ))}
+                </select>
               </li>
             ))}
           </ul>

@@ -48,6 +48,14 @@ const sumar = (fecha, dias) => {
   return iso(d);
 };
 
+// Fotos de prueba: los primeros bytes de un JPEG y relleno (el servidor reconoce el tipo por el contenido, no lo dibuja).
+const fotoDePrueba = (relleno) => {
+  const b = Buffer.alloc(3000, relleno);
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0]).copy(b);
+  return `data:image/jpeg;base64,${b.toString('base64')}`;
+};
+const FOTOS = { comprobante: fotoDePrueba(1), orden_de_pago: fotoDePrueba(2) };
+
 const token = {
   admin: await entrar('admin', CLAVES.admin),
   circulacion: await entrar('circulacion', CLAVES.circulacion),
@@ -138,7 +146,7 @@ if (FASE === 'escribir') {
   verificar('las reglas traen motivos, días de anticipación y la entrega si se envía ahora', reglas.motivos.length === 4 && reglas.diasMaximosDeAnticipacion === 7 && /^\d{4}-\d{2}-\d{2}$/.test(reglas.entregaSiEnviasAhora.fecha));
   const hoy = iso(new Date());
   const lunesSolv = proximo(1, 1);
-  const solicitud = (cambios = {}) => ({ solicitante: 'Luis Ramírez', identificacion: '201955321', cui: '2456 78901 0101', programa: 'Licenciatura en Ciencias Jurídicas y Sociales', motivo: 'Grado', correo: 'luis@usac.edu.gt', ordenDePago: '88123456', fechaPapeleria: lunesSolv, esEstudiante: true, ...cambios });
+  const solicitud = (cambios = {}) => ({ solicitante: 'Luis Ramírez', identificacion: '201955321', cui: '2456 78901 0101', programa: 'Licenciatura en Ciencias Jurídicas y Sociales', motivo: 'Grado', correo: 'luis@usac.edu.gt', ordenDePago: '88123456', fechaPapeleria: lunesSolv, esEstudiante: true, fotos: FOTOS, ...cambios });
   const fechaFueraDeRango = sumar(hoy, 9);
   const casos = [
     ['sin CUI válido', { cui: '123' }],
@@ -151,6 +159,8 @@ if (FASE === 'escribir') {
     ['con fecha en fin de semana', { fechaPapeleria: proximo(6, 1) <= sumar(hoy, 7) ? proximo(6, 1) : proximo(0, 1) }],
     ['con motivo inventado', { motivo: 'Cualquiera' }],
     ['con carné muy corto', { identificacion: '12' }],
+    ['sin fotos (desde la web)', { fotos: undefined }],
+    ['con una sola foto', { fotos: { comprobante: FOTOS.comprobante } }],
   ];
   for (const [nombre, cambios] of casos) {
     const r = await api('POST', '/solvencia', { cuerpo: solicitud(cambios) });
@@ -161,15 +171,20 @@ if (FASE === 'escribir') {
   verificar('el CUI se guarda sin espacios y el carné en mayúsculas', buena.datos.cui === '2456789010101' && buena.datos.identificacion === '201955321');
   const dosVeces = await api('POST', '/solvencia', { cuerpo: solicitud({ identificacion: '201955322', fechaPapeleria: sumar(lunesSolv, 1) <= sumar(hoy, 7) ? lunesSolv : lunesSolv }) });
   verificar('una segunda solicitud también se acepta (SOL-002)', dosVeces.estado === 200 && dosVeces.datos.id === 'SOL-002');
-  verificar('rechazar con un motivo demasiado corto -> 400', (await api('PATCH', '/solvencia/SOL-002/rechazar', { token: token.circulacion, cuerpo: { observacion: 'ab' } })).estado === 400);
-  const rechazada = await api('PATCH', '/solvencia/SOL-002/rechazar', { token: token.circulacion, cuerpo: { observacion: 'El número de orden de pago no coincide con la boleta.' } });
-  verificar('rechazar con motivo -> 200 y queda escrito', rechazada.estado === 200 && rechazada.datos.estado === 'rechazada' && /boleta/.test(rechazada.datos.observacion));
-  const tercera = await api('POST', '/solvencia', { cuerpo: solicitud({ identificacion: '201955323' }) });
-  const sinMotivo = await api('PATCH', `/solvencia/${tercera.datos.id}/rechazar`, { token: token.circulacion, cuerpo: {} });
-  verificar('rechazar sin motivo también se puede (el motivo es opcional)', sinMotivo.estado === 200 && sinMotivo.datos.estado === 'rechazada' && sinMotivo.datos.observacion === undefined);
-  await api('PATCH', '/solvencia/SOL-001/avanzar', { token: token.circulacion });
-  const aprobada = await api('PATCH', '/solvencia/SOL-001/avanzar', { token: token.circulacion });
-  verificar('pasar a revisión y aprobar -> aprobada', aprobada.datos.estado === 'aprobada');
+  const enLaPc = { comprobante: 'solvencias/comprobante/Luis_Ramirez.jpg', orden_de_pago: 'solvencias/orden_de_pago/Luis_Ramirez.jpg' };
+  verificar('circulación no puede rechazar (solo la administración) -> 403', (await api('PATCH', '/solvencia/SOL-002/rechazar', { token: token.circulacion, cuerpo: { observacion: 'Motivo cualquiera', guardadas: enLaPc } })).estado === 403);
+  verificar('rechazar con un motivo demasiado corto -> 400', (await api('PATCH', '/solvencia/SOL-002/rechazar', { token: token.admin, cuerpo: { observacion: 'ab', guardadas: enLaPc } })).estado === 400);
+  verificar('rechazar sin motivo -> 400 (el motivo es obligatorio)', (await api('PATCH', '/solvencia/SOL-002/rechazar', { token: token.admin, cuerpo: { guardadas: enLaPc } })).estado === 400);
+  verificar('rechazar sin haber guardado las fotos en la PC -> 400', (await api('PATCH', '/solvencia/SOL-002/rechazar', { token: token.admin, cuerpo: { observacion: 'El número no coincide.' } })).estado === 400);
+  const rechazada = await api('PATCH', '/solvencia/SOL-002/rechazar', { token: token.admin, cuerpo: { observacion: 'El número de orden de pago no coincide con la boleta.', guardadas: enLaPc } });
+  verificar('rechazar con motivo -> 200 y queda escrito, con quién lo revisó', rechazada.estado === 200 && rechazada.datos.estado === 'rechazada' && /boleta/.test(rechazada.datos.observacion) && rechazada.datos.revisadaPor?.usuario === 'admin');
+  const tercera = await api('POST', '/solvencia', { cuerpo: solicitud({ identificacion: '201955323', fotos: undefined, kiosco: 'k1' }) });
+  verificar('desde un kiosco se puede enviar sin fotos', tercera.estado === 200 && !tercera.datos.fotos, JSON.stringify(tercera.json));
+  const sinFotos = await api('PATCH', `/solvencia/${tercera.datos.id}/rechazar`, { token: token.admin, cuerpo: { observacion: 'Faltó presentar la boleta en el mostrador.' } });
+  verificar('una solicitud sin fotos se resuelve sin guardar nada en la PC', sinFotos.estado === 200 && sinFotos.datos.estado === 'rechazada');
+  const aprobada = await api('PATCH', '/solvencia/SOL-001/aprobar', { token: token.admin, cuerpo: { guardadas: enLaPc } });
+  verificar('aprobar -> aprobada y anota dónde quedaron las fotos', aprobada.datos?.estado === 'aprobada' && aprobada.datos.fotos.comprobante.guardadaEn === enLaPc.comprobante, JSON.stringify(aprobada.json));
+  verificar('aprobarla otra vez -> 409', (await api('PATCH', '/solvencia/SOL-001/aprobar', { token: token.admin, cuerpo: { guardadas: enLaPc } })).estado === 409);
 
   console.log('== Comprobantes por correo');
   const compSol = await api('POST', '/comprobantes/enviar', { cuerpo: { tipo: 'solvencia', id: 'SOL-001', codigo: buena.datos.codigoConfirmacion, correo: 'otra@usac.edu.gt' } });

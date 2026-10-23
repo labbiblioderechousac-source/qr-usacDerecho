@@ -20,18 +20,17 @@ export const SIGUIENTE_RESERVA = { reservado: 'Sellar ingreso', en_uso: 'Sellar 
 
 export const ESTADO_SOLVENCIA = {
   pendiente: { tone: 'warning', label: 'Pendiente' },
-  en_revision: { tone: 'accent', label: 'En revisión' },
+  en_revision: { tone: 'warning', label: 'Pendiente' }, // estado de versiones anteriores: se resuelve igual que una pendiente
   aprobada: { tone: 'status', label: 'Aprobada' },
   rechazada: { tone: 'danger', label: 'Rechazada' },
 };
 
-export const SIGUIENTE_SOLVENCIA = { pendiente: 'Pasar a revisión', en_revision: 'Aprobar' };
 
 
 // Roles del personal, con lo que puede hacer cada uno (propuesta, sección 4.5.6).
 export const ROLES_DEL_PERSONAL = {
   administrador: { nombre: 'Administrador', descripcion: 'Gestión completa y configuración general' },
-  circulacion: { nombre: 'Personal de circulación', descripcion: 'Reservas, solicitudes y usuarios' },
+  circulacion: { nombre: 'Personal de circulación', descripcion: 'Reservas, usuarios y consulta de solicitudes' },
   tesis: { nombre: 'Personal de tesis', descripcion: 'Documentos digitales y códigos QR' },
   consulta: { nombre: 'Consulta', descripcion: 'Solo estadísticas' },
 };
@@ -47,6 +46,7 @@ export const ACCIONES_DE_ACTIVIDAD = {
   'reserva.penalizada': 'Penalizó a alguien por no presentarse',
   'reserva.penalizacion_quitada': 'Quitó una penalización por no presentarse',
   'solicitud.avanzada': 'Avanzó una solicitud de solvencia',
+  'solicitud.aprobada': 'Aprobó una solicitud de solvencia',
   'solicitud.rechazada': 'Rechazó una solicitud de solvencia',
   'tesis.documento': 'Cambió el documento digital de una tesis',
   'qr.estado': 'Cambió el estado de un código QR',
@@ -75,6 +75,8 @@ export const ACCIONES_DE_ACTIVIDAD = {
 export const TIPO_DE_CORREO = {
   reserva: 'Confirmación de reserva',
   solvencia: 'Solicitud de solvencia',
+  solvencia_aprobada: 'Solvencia aprobada (con constancia)',
+  solvencia_rechazada: 'Solvencia rechazada',
   comprobante: 'Comprobante a pedido',
   reserva_cancelada: 'Reserva cancelada',
   reserva_liberada: 'Reserva liberada',

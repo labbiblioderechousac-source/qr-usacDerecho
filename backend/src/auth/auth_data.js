@@ -1,8 +1,15 @@
 const crypto = require('node:crypto');
 const almacen = require('../../utils/almacen');
 const cuentasData = require('./cuentas_data');
+const configuracion = require('../configuracion/configuracion_data');
 
 const HORAS_DE_SESION = 8;
+// Un rol cuya sesión no se cierra por inactividad (configuración: «nunca») tiene sesiones de 30 días que se renuevan solas con el uso.
+const DIAS_DE_SESION_SIN_CIERRE = 30;
+const HORA_MS = 60 * 60 * 1000;
+
+const sinCierre = (rol) => configuracion.minutosDeInactividad(rol) === 0;
+const duracionDeSesion = (rol) => (sinCierre(rol) ? DIAS_DE_SESION_SIN_CIERRE * 24 : HORAS_DE_SESION) * HORA_MS;
 const MAXIMO_DE_INTENTOS = 5;
 const MINUTOS_DE_BLOQUEO = 5;
 const MAXIMO_DE_SESIONES = 500;
@@ -96,9 +103,9 @@ function iniciarSesion(usuario, clave) {
   }
   const token = crypto.randomBytes(32).toString('hex');
   const datos = { usuario: cuenta.usuario, nombre: cuenta.nombre, rol: cuenta.rol };
-  sesiones.set(huellaDe(token), { ...datos, expiraEn: Date.now() + HORAS_DE_SESION * 60 * 60 * 1000 });
+  sesiones.set(huellaDe(token), { ...datos, expiraEn: Date.now() + duracionDeSesion(cuenta.rol) });
   guardar();
-  return { sesion: { token, ...datos, rolNombre: cuentasData.ROLES[cuenta.rol] } };
+  return { sesion: { token, ...datos, rolNombre: cuentasData.ROLES[cuenta.rol], minutosDeInactividad: configuracion.minutosDeInactividad(cuenta.rol) } };
 }
 
 function sesionDeToken(token) {
@@ -106,10 +113,21 @@ function sesionDeToken(token) {
   const huella = huellaDe(token);
   const sesion = sesiones.get(huella);
   if (!sesion) return null;
-  if (sesion.expiraEn < Date.now()) {
+  const ahora = Date.now();
+  if (sesion.expiraEn < ahora) {
     sesiones.delete(huella);
     guardar();
     return null;
+  }
+  // La duración sigue a la configuración actual: sin cierre, se renueva con el uso (como mucho una vez por hora, para no guardar en
+  // cada petición); si el administrador vuelve a poner un límite, la sesión larga se acorta a las horas normales.
+  const duracion = duracionDeSesion(sesion.rol);
+  if (sinCierre(sesion.rol) && ahora + duracion - sesion.expiraEn > HORA_MS) {
+    sesion.expiraEn = ahora + duracion;
+    guardar();
+  } else if (!sinCierre(sesion.rol) && sesion.expiraEn > ahora + duracion) {
+    sesion.expiraEn = ahora + duracion;
+    guardar();
   }
   return sesion;
 }
